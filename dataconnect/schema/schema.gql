@@ -1,59 +1,35 @@
 
-"use dataconnect";
-
-/**
- * Representa un usuario del sistema e-Factura Bridge.
- */
-type User @entity(name: "users") {
-  email: String!
-  companyName: String!
-  role: UserRole!
-}
-
-enum UserRole {
-  admin
-  user
-}
-
-/**
- * Representa una presentación de factura recibida a través del webhook.
- */
-type InvoiceSubmission @entity(name: "invoiceSubmissions") {
-  submissionDate: Timestamp!
+"""
+A schema for an e-invoicing integration application.
+"""
+type InvoiceSubmission @table(name: "invoiceSubmissions") {
+  submissionDate: DateTime!
   invoiceData: String!
   status: String!
   hkaResponseId: String
 }
 
-/**
- * Representa una respuesta recibida del servicio HKA.
- */
-type HKAResponse @entity(name: "hkaResponses") {
-  responseDate: Timestamp!
+type HKAResponse @table(name: "hkaResponses") {
+  responseDate: DateTime!
   statusCode: Int!
   responseBody: String!
   invoiceSubmissionId: String
 }
 
-/**
- * Representa configuraciones del sistema o de la empresa.
- */
-type Configuration @entity(name: "configurations") {
-  companyId: String
-  settingKey: String!
-  settingValue: String!
+type Configuration @table(name: "configurations") {
+  companyName: String!
+  taxId: String!
+  fiscalAddress: String!
+  demoEnabled: Boolean!
+  demoTokenEmpresa: String!
+  demoTokenPassword: String!
+  prodEnabled: Boolean!
+  prodTokenEmpresa: String!
+  prodTokenPassword: String!
 }
 
-type Query {
-  listUsers: [User]! @auth(level: ADMIN)
-  listInvoiceSubmissions: [InvoiceSubmission]! @auth(level: ADMIN)
-  listHkaResponses: [HKAResponse]! @auth(level: ADMIN)
-  listConfigurations: [Configuration]! @auth(level: ADMIN)
+type User @table(name: "users") {
+  email: String! @unique
+  companyName: String
+  role: String
 }
-
-type Mutation {
-  createUser(email: String!, companyName: String!, role: UserRole!): User @auth(level: ADMIN)
-  updateInvoiceSubmissionStatus(id: String!, status: String!): InvoiceSubmission @auth(level: ADMIN)
-  createConfiguration(settingKey: String!, settingValue: String!): Configuration @auth(level: ADMIN)
-}
-
