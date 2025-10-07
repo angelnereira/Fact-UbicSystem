@@ -75,6 +75,16 @@
         "webhookIdentifier": {
             "type": "string",
             "description": "Unique URL-friendly slug for the company's webhook endpoint."
+        },
+        "demoApiUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "The base URL for the HKA demo API."
+        },
+        "prodApiUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "The base URL for the HKA production API."
         }
       },
       "required": [

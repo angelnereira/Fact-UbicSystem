@@ -34,7 +34,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -51,10 +50,12 @@ const settingsSchema = z
     demoEnabled: z.boolean(),
     demoTokenEmpresa: z.string(),
     demoTokenPassword: z.string(),
+    demoApiUrl: z.string().url("Debe ser una URL válida."),
 
     prodEnabled: z.boolean(),
     prodTokenEmpresa: z.string(),
     prodTokenPassword: z.string(),
+    prodApiUrl: z.string().url("Debe ser una URL válida."),
   })
   .refine(
     (data) => {
@@ -111,9 +112,11 @@ export default function SettingsPage() {
       demoEnabled: true,
       demoTokenEmpresa: "",
       demoTokenPassword: "",
+      demoApiUrl: "https://api.hka.demo.example",
       prodEnabled: false,
       prodTokenEmpresa: "",
       prodTokenPassword: "",
+      prodApiUrl: "https://api.hka.production.example",
     },
   });
 
@@ -163,10 +166,6 @@ export default function SettingsPage() {
       setIsConnecting(false);
   }
   
-  const baseWebhookUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/api/webhooks/invoices/` 
-    : '/api/webhooks/invoices/';
-
   if(isConfigLoading) {
     return (
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
@@ -339,10 +338,19 @@ export default function SettingsPage() {
                       </FormItem>
                     )}
                   />
-                   <div className="space-y-2">
-                      <Label>URL de HKA</Label>
-                      <Input readOnly value="https://api.hka.demo.example" />
-                    </div>
+                  <FormField
+                    control={form.control}
+                    name="demoApiUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>URL de API de Demo</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://api.hka.demo.example" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </TabsContent>
                 <TabsContent value="prod" className="mt-4 space-y-4">
                    <FormField
@@ -391,10 +399,19 @@ export default function SettingsPage() {
                       </FormItem>
                     )}
                   />
-                   <div className="space-y-2">
-                      <Label>URL de HKA</Label>
-                      <Input readOnly value="https://api.hka.production.example" />
-                    </div>
+                  <FormField
+                    control={form.control}
+                    name="prodApiUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>URL de API de Producción</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://api.hka.production.example" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </TabsContent>
               </Tabs>
                <div className="mt-6 flex items-center gap-4">
