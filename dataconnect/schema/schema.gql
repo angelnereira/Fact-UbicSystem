@@ -1,30 +1,44 @@
-type InvoiceSubmission @table {
-  submissionDate: String!
-  invoiceData: String!
-  status: String!
-  hkaResponseId: String
-}
+# File: dataconnect/schema/schema.gql
 
-type User @table {
+"""
+Represents a user of the e-Factura Bridge system.
+"""
+type User @table(name: "users") {
   email: String!
   companyName: String!
   role: String!
 }
 
-type Configuration @table {
+"""
+Represents system-wide or company-specific configurations.
+"""
+type Configuration @table(name: "configurations") {
   companyId: String
   settingKey: String!
   settingValue: String!
 }
 
-type HKAResponse @table {
-  responseDate: String!
+"""
+Represents an invoice submission received via webhook.
+"""
+type InvoiceSubmission @table(name: "invoiceSubmissions") {
+  submissionDate: Timestamp!
+  invoiceData: String!
+  status: String!
+  hkaResponseId: String
+}
+
+"""
+Represents a response received from the HKA (The Factory HKA) service.
+"""
+type HKAResponse @table(name: "hkaResponses") {
+  responseDate: Timestamp!
   statusCode: Int!
   responseBody: String!
   invoiceSubmissionId: String
 }
 
 type Query {
-  listInvoiceSubmissions: [InvoiceSubmission] @permission(public: true)
-  listUsers: [User] @permission(public: true)
+  listConfigurations: [Configuration] @auth(mode: "user")
+  listInvoiceSubmissions: [InvoiceSubmission] @auth(mode: "user")
 }
