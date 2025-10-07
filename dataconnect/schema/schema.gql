@@ -1,27 +1,30 @@
-# File: dataconnect/schema/schema.gql
+# GraphQL schema for Fact-UbicSystem
 
 """
-Represents a user of the e-Factura Bridge system.
+Represents a user of the Fact-UbicSystem.
 """
-type User @table(name: "users") {
-  email: String!
-  companyName: String!
-  role: String!
+type User @table(key: "userId") {
+  userId: String! @db(default: "uuid()")
+  email: String
+  companyName: String
+  role: String
 }
 
 """
 Represents system-wide or company-specific configurations.
 """
-type Configuration @table(name: "configurations") {
+type Configuration @table(key: "configId") {
+  configId: String! @db(default: "uuid()")
   companyId: String
   settingKey: String!
-  settingValue: String!
+  settingValue: String
 }
 
 """
 Represents an invoice submission received via webhook.
 """
-type InvoiceSubmission @table(name: "invoiceSubmissions") {
+type InvoiceSubmission @table(key: "submissionId") {
+  submissionId: String! @db(default: "uuid()")
   submissionDate: Timestamp!
   invoiceData: String!
   status: String!
@@ -31,7 +34,8 @@ type InvoiceSubmission @table(name: "invoiceSubmissions") {
 """
 Represents a response received from the HKA (The Factory HKA) service.
 """
-type HKAResponse @table(name: "hkaResponses") {
+type HKAResponse @table(key: "responseId") {
+  responseId: String! @db(default: "uuid()")
   responseDate: Timestamp!
   statusCode: Int!
   responseBody: String!
@@ -39,6 +43,39 @@ type HKAResponse @table(name: "hkaResponses") {
 }
 
 type Query {
-  listConfigurations: [Configuration] @auth(mode: "user")
-  listInvoiceSubmissions: [InvoiceSubmission] @auth(mode: "user")
+  listUsers: [User]
+    @auth(
+      providers: [
+        {provider: "anonymous"}
+        {provider: "password"}
+      ]
+    )
+    @resolver(name: "dataconnect-example/listUsers")
+
+  listConfigurations: [Configuration]
+    @auth(
+      providers: [
+        {provider: "anonymous"}
+        {provider: "password"}
+      ]
+    )
+    @resolver(name: "dataconnect-example/listConfigurations")
+
+  listInvoiceSubmissions: [InvoiceSubmission]
+    @auth(
+      providers: [
+        {provider: "anonymous"}
+        {provider: "password"}
+      ]
+    )
+    @resolver(name: "dataconnect-example/listInvoiceSubmissions")
+
+  listHkaResponses: [HKAResponse]
+    @auth(
+      providers: [
+        {provider: "anonymous"}
+        {provider: "password"}
+      ]
+    )
+    @resolver(name: "dataconnect-example/listHkaResponses")
 }
