@@ -1,0 +1,392 @@
+
+"use client";
+
+import { useEffect, useState } from "react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+
+import { useFirestore, useCollection, updateDocumentNonBlocking, useMemoFirebase } from "@/firebase";
+import { collection, query, limit, doc } from "firebase/firestore";
+
+import { PageHeader } from "@/components/page-header";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
+
+const settingsSchema = z
+  .object({
+    companyName: z.string().min(2, "El nombre de la empresa es requerido."),
+    taxId: z.string().min(6, "El ID fiscal es requerido."),
+    fiscalAddress: z.string().min(5, "La dirección fiscal es requerida."),
+    
+    demoEnabled: z.boolean(),
+    demoTokenEmpresa: z.string(),
+    demoTokenPassword: z.string(),
+
+    prodEnabled: z.boolean(),
+    prodTokenEmpresa: z.string(),
+    prodTokenPassword: z.string(),
+  })
+  .refine(
+    (data) => {
+      // If demo is enabled, its tokens are required
+      if (data.demoEnabled && (!data.demoTokenEmpresa || !data.demoTokenPassword)) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Las credenciales de Demo son requeridas cuando el ambiente está activado.",
+      path: ["demoTokenEmpresa"], // you can point to a specific field
+    }
+  ).refine(
+     (data) => {
+      if (data.prodEnabled && (!data.prodTokenEmpresa || !data.prodTokenPassword)) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Las credenciales de Producción son requeridas cuando el ambiente está activado.",
+      path: ["prodTokenEmpresa"],
+    }
+  )
+  .refine((data) => !(data.demoEnabled && data.prodEnabled), {
+    message: "Solo un ambiente (Demo o Producción) puede estar activo a la vez.",
+    path: ["prodEnabled"], // Point error to the second switch
+  });
+
+type SettingsFormValues = z.infer<typeof settingsSchema>;
+
+export default function SettingsPage() {
+  const { toast } = useToast();
+  const firestore = useFirestore();
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<"success" | "error" | null>(null);
+  
+  // Hook para leer la configuración de Firestore
+  const configurationsQuery = useMemoFirebase(() =>
+    firestore ? query(collection(firestore, "configurations"), limit(1)) : null,
+    [firestore]
+  );
+  const { data: configData, isLoading: isConfigLoading } = useCollection<SettingsFormValues>(configurationsQuery);
+  const existingConfig = configData?.[0];
+
+  const form = useForm<SettingsFormValues>({
+    resolver: zodResolver(settingsSchema),
+    defaultValues: {
+      companyName: "",
+      taxId: "",
+      fiscalAddress: "",
+      demoEnabled: true,
+      demoTokenEmpresa: "",
+      demoTokenPassword: "",
+      prodEnabled: false,
+      prodTokenEmpresa: "",
+      prodTokenPassword: "",
+    },
+  });
+
+  // Efecto para popular el formulario cuando los datos de Firestore cargan
+  useEffect(() => {
+    if (existingConfig) {
+      form.reset(existingConfig);
+    }
+  }, [existingConfig, form]);
+
+
+  function onSubmit(data: SettingsFormValues) {
+    if (!firestore || !existingConfig?.id) {
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "No se pudo conectar a la base de datos o no existe configuración."
+        })
+        return;
+    }
+
+    const configDocRef = doc(firestore, "configurations", existingConfig.id);
+    updateDocumentNonBlocking(configDocRef, data);
+
+    toast({
+      title: "¡Configuración Guardada!",
+      description: "Tu información de empresa y HKA ha sido actualizada.",
+    });
+  }
+  
+  const handleValidateConnection = async () => {
+      setIsConnecting(true);
+      setConnectionStatus(null);
+      
+      // Simulate API call to HKA module
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const isSuccess = Math.random() > 0.3; // 70% chance of success
+      setConnectionStatus(isSuccess ? 'success' : 'error');
+      
+      toast({
+          title: isSuccess ? "Conexión Exitosa" : "Conexión Fallida",
+          description: isSuccess ? "Conectado exitosamente a The Factory HKA." : "Credenciales inválidas o API no accesible.",
+          variant: isSuccess ? "default" : "destructive",
+      });
+      
+      setIsConnecting(false);
+  }
+
+  if(isConfigLoading) {
+    return (
+        <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
+            <PageHeader
+                title="Configuración"
+                description="Configura los detalles de tu empresa y las credenciales de HKA."
+            />
+            <Card>
+                <CardHeader>
+                    <Skeleton className="h-6 w-1/3" />
+                    <Skeleton className="h-4 w-2/3" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                </CardContent>
+            </Card>
+             <Card>
+                <CardHeader>
+                    <Skeleton className="h-6 w-1/3" />
+                    <Skeleton className="h-4 w-2/3" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                </CardContent>
+            </Card>
+        </main>
+    )
+  }
+
+  return (
+    <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
+      <PageHeader
+        title="Configuración"
+        description="Configura los detalles de tu empresa y las credenciales de HKA."
+      />
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Información de la Empresa</CardTitle>
+              <CardDescription>
+                Actualiza los detalles generales y fiscales de tu empresa.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="companyName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre de la Empresa</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="taxId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ID Fiscal (RFC)</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+               <FormField
+                  control={form.control}
+                  name="fiscalAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dirección Fiscal</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Credenciales HKA</CardTitle>
+              <CardDescription>
+                Gestiona tu conexión a The Factory HKA.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="demo">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="demo">Ambiente de Demo</TabsTrigger>
+                  <TabsTrigger value="prod">Ambiente de Producción</TabsTrigger>
+                </TabsList>
+                <TabsContent value="demo" className="mt-4 space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="demoEnabled"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">
+                            Activar Ambiente de Demo
+                          </FormLabel>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="demoTokenEmpresa"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Token Empresa</FormLabel>
+                        <FormControl>
+                          <Input placeholder="demo-token-empresa" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="demoTokenPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Token Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <div className="space-y-2">
+                      <Label>URL de HKA</Label>
+                      <Input readOnly value="https://api.hka.demo.example" />
+                    </div>
+                </TabsContent>
+                <TabsContent value="prod" className="mt-4 space-y-4">
+                   <FormField
+                    control={form.control}
+                    name="prodEnabled"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">
+                            Activar Ambiente de Producción
+                          </FormLabel>
+                           <FormMessage className="text-xs" />
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                   <FormField
+                    control={form.control}
+                    name="prodTokenEmpresa"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Token Empresa</FormLabel>
+                        <FormControl>
+                          <Input placeholder="prod-token-empresa" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="prodTokenPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Token Password</FormLabel>
+                        <FormControl>
+                          <Input type="password" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                   <div className="space-y-2">
+                      <Label>URL de HKA</Label>
+                      <Input readOnly value="https://api.hka.production.example" />
+                    </div>
+                </TabsContent>
+              </Tabs>
+               <div className="mt-6 flex items-center gap-4">
+                <Button type="button" variant="outline" onClick={handleValidateConnection} disabled={isConnecting}>
+                    {isConnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                    Validar Conexión
+                </Button>
+                {connectionStatus === 'success' && <CheckCircle className="h-6 w-6 text-green-500" />}
+                {connectionStatus === 'error' && <AlertTriangle className="h-6 w-6 text-red-500" />}
+               </div>
+            </CardContent>
+          </Card>
+          
+          <div className="flex justify-end">
+             <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Guardar Cambios
+             </Button>
+          </div>
+        </form>
+      </Form>
+    </main>
+  );
+}

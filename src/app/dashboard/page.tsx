@@ -1,0 +1,89 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import {
+  Activity,
+  FileStack,
+  PlusCircle,
+  PlugZap,
+  GitBranch,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/stat-card";
+import { RecentInvoices } from "@/components/recent-invoices";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export const metadata: Metadata = {
+  title: "Dashboard | Fact-UbicSystem",
+};
+
+export default function DashboardPage() {
+  return (
+    <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
+      <PageHeader
+        title="Resumen del Dashboard"
+        description="Supervisa tu sistema de facturación de un vistazo."
+      >
+        <Button asChild>
+          <Link href="/dashboard/invoices/new">
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Nueva Factura
+          </Link>
+        </Button>
+      </PageHeader>
+      <div className="grid gap-4 md:grid-cols-2 md:gap-8 lg:grid-cols-3">
+        <StatCard
+          title="Salud del Sistema"
+          value="Operacional"
+          icon={Activity}
+          description="Todos los sistemas funcionan correctamente."
+          status="success"
+        />
+        <StatCard
+          title="Conexión HKA"
+          value="Conectado"
+          icon={PlugZap}
+          description="Conexión segura a The Factory HKA."
+          status="success"
+        />
+        <StatCard
+          title="Folios Restantes"
+          value="4,321"
+          icon={FileStack}
+          description="21.6% de folios restantes."
+          progress={21.6}
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card className="md:col-span-2">
+          <RecentInvoices />
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Acciones Rápidas</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/movements">
+                <GitBranch className="mr-2 h-4 w-4" />
+                Ver Movimientos
+              </Link>
+            </Button>
+             <Button variant="outline" asChild>
+              <Link href="/dashboard/settings">
+                <PlugZap className="mr-2 h-4 w-4" />
+                Configurar HKA
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/invoices/status">
+                <FileStack className="mr-2 h-4 w-4" />
+                Consultar Estado de Factura
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </main>
+  );
+}

@@ -1,0 +1,133 @@
+"use client";
+
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/page-header";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from "@/components/ui/textarea";
+
+export default function CancelInvoicePage() {
+  const [invoiceId, setInvoiceId] = useState("");
+  const [reason, setReason] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleCancel = async () => {
+    if (!invoiceId || !reason) {
+      toast({
+        variant: "destructive",
+        title: "Información Faltante",
+        description: "Por favor, proporciona el ID de la factura y el motivo de la anulación.",
+      });
+      return;
+    }
+    setIsLoading(true);
+
+    // Simulate API call
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    // Simulate success or failure
+    const isSuccess = Math.random() > 0.2; 
+    
+    if (isSuccess) {
+      toast({
+        title: "Anulación de Factura Enviada",
+        description: `La solicitud para anular la factura ${invoiceId} ha sido enviada.`,
+      });
+      setInvoiceId("");
+      setReason("");
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Fallo en la Anulación",
+        description: `No se pudo anular la factura ${invoiceId}. Por favor, inténtalo de nuevo.`,
+      });
+    }
+
+    setIsLoading(false);
+  };
+
+  return (
+    <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
+      <PageHeader
+        title="Anular Factura"
+        description="Envía una solicitud para anular una factura electrónica timbrada."
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Solicitud de Anulación</CardTitle>
+          <CardDescription>
+            Ingresa el UUID o Folio de la factura a anular y proporciona un motivo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="invoiceId" className="font-medium">ID de Factura (UUID o Folio)</label>
+            <Input
+              id="invoiceId"
+              placeholder="Ej: a1b2c3d4-e5f6-..."
+              value={invoiceId}
+              onChange={(e) => setInvoiceId(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+             <label htmlFor="reason" className="font-medium">Motivo de Anulación</label>
+            <Textarea
+              id="reason"
+              placeholder="Ej: Error en los datos del cliente"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Este motivo será enviado a la autoridad fiscal.</p>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={!invoiceId || !reason || isLoading}>
+                {isLoading && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Solicitar Anulación
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acción es irreversible y enviará una solicitud formal de anulación para la factura{" "}
+                  <strong>{invoiceId}</strong>. No se puede deshacer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Volver</AlertDialogCancel>
+                <AlertDialogAction onClick={handleCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Sí, Anular Factura
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
