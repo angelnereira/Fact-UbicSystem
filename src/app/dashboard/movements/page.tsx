@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { StatCard } from "@/components/stat-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { consultarFolios } from "@/lib/hka/client";
 
 // Tipado para los datos que vienen de Firestore
 type InvoiceSubmission = {
@@ -72,7 +73,6 @@ const statusBadgeStyles: { [key: string]: string } = {
 const mockApiHealth = {
   connectionStatus: "success",
   activeEnvironment: "demo",
-  remainingFolios: 0,
   latency: 0,
   errorRate: 0,
 };
@@ -80,8 +80,33 @@ const mockApiHealth = {
 export default function MovementsPage() {
   const { toast } = useToast();
   const [isAutomationOn, setIsAutomationOn] = useState(true);
+  const [folios, setFolios] = useState(0);
+  const [isLoadingFolios, setIsLoadingFolios] = useState(true);
   
   const firestore = useFirestore();
+
+  useEffect(() => {
+    async function fetchFolios() {
+      setIsLoadingFolios(true);
+      try {
+        const remainingFolios = await consultarFolios();
+        setFolios(remainingFolios);
+      } catch (error) {
+        console.error("Error al consultar folios en MovementsPage:", error);
+        toast({
+          variant: "destructive",
+          title: "Error de Conexión",
+          description: "No se pudieron obtener los folios restantes.",
+        });
+        setFolios(0); // Muestra 0 en caso de error
+      } finally {
+        setIsLoadingFolios(false);
+      }
+    }
+
+    fetchFolios();
+  }, [toast]);
+
 
   const submissionsQuery = useMemoFirebase(
     () =>
@@ -193,7 +218,7 @@ export default function MovementsPage() {
         />
         <StatCard
           title="Folios Restantes"
-          value={mockApiHealth.remainingFolios.toLocaleString()}
+          value={isLoadingFolios ? "Cargando..." : folios.toLocaleString()}
           icon={FileText}
           description="Folios disponibles para timbrar."
         />

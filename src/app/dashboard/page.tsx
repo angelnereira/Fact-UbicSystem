@@ -12,12 +12,22 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { RecentInvoices } from "@/components/recent-invoices";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { consultarFolios } from "@/lib/hka/client";
 
 export const metadata: Metadata = {
   title: "Dashboard | Fact-UbicSystem",
 };
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  let remainingFolios = 0;
+  try {
+    // Se intenta obtener los folios reales desde la API
+    remainingFolios = await consultarFolios();
+  } catch (error) {
+    console.error("Error al consultar folios para el dashboard:", error);
+    // Si falla, se mantiene en 0 para no romper la UI.
+  }
+
   return (
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
       <PageHeader
@@ -48,10 +58,9 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Folios Restantes"
-          value="0"
+          value={remainingFolios.toLocaleString()}
           icon={FileStack}
-          description="0% de folios restantes."
-          progress={0}
+          description="Folios disponibles para timbrar."
         />
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
