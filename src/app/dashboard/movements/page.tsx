@@ -350,12 +350,12 @@ export default function MovementsPage() {
                 </p>
                 <div className="flex w-full max-w-lg items-center space-x-2">
                    <div className="flex items-center flex-grow">
-                     <span className="rounded-l-md border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground whitespace-nowrap">
-                       {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/invoices/`}
+                     <span className="rounded-l-md border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
+                       URL del Webhook:
                      </span>
                      <Input
                         type="text"
-                        placeholder="tu-identificador"
+                        placeholder="tu-identificador-unico"
                         className="rounded-l-none"
                         value={webhookIdentifier}
                         onChange={(e) => setWebhookIdentifier(e.target.value)}
@@ -380,6 +380,12 @@ export default function MovementsPage() {
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
+                 <p className="text-xs text-muted-foreground">
+                  La URL completa es:{" "}
+                  <code className="bg-muted p-1 rounded-sm">
+                    {fullWebhookUrl.startsWith('http') ? fullWebhookUrl : 'Guarda un identificador para ver la URL.'}
+                  </code>
+                </p>
               </div>
             </TabsContent>
             <TabsContent value="external_api" className="mt-4">

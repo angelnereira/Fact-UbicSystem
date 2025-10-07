@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -263,7 +264,7 @@ export default function SettingsPage() {
                       <FormLabel>Identificador del Webhook</FormLabel>
                       <div className="flex items-center">
                         <span className="rounded-l-md border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
-                          {baseWebhookUrl}
+                          .../api/webhooks/invoices/
                         </span>
                         <FormControl>
                           <Input className="rounded-l-none" placeholder="mi-empresa-unica" {...field} />
