@@ -48,10 +48,10 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Folios Restantes"
-          value="4,321"
+          value="0"
           icon={FileStack}
-          description="21.6% de folios restantes."
-          progress={21.6}
+          description="0% de folios restantes."
+          progress={0}
         />
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

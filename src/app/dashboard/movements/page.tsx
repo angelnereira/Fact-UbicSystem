@@ -72,9 +72,9 @@ const statusBadgeStyles: { [key: string]: string } = {
 const mockApiHealth = {
   connectionStatus: "success",
   activeEnvironment: "demo",
-  remainingFolios: 4321,
-  latency: 120,
-  errorRate: 1.2,
+  remainingFolios: 0,
+  latency: 0,
+  errorRate: 0,
 };
 
 export default function MovementsPage() {
