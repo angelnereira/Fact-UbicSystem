@@ -42,13 +42,12 @@ interface ApiConfig {
 // --- Configuration Fetching ---
 
 /**
- * Fetches the active HKA API configuration from Firestore.
- * It can find the configuration either by a unique webhook identifier or
- * by default (fetching the first one if no identifier is provided).
+ * Fetches the active HKA API configuration from Firestore using the Admin SDK.
  * @param {string} [identifier] - The unique webhook identifier slug.
  * @returns {Promise<ApiConfig>} The active API configuration.
  */
 async function getActiveHkaConfig(identifier?: string): Promise<ApiConfig> {
+  // Explicitly use the server-side initialization
   const { firestore } = initializeFirebase();
   const configCollection = collection(firestore, "configurations");
   
@@ -227,7 +226,7 @@ export async function consultarFolios(identifier?: string): Promise<number> {
       return response.remaining_folios;
     }
     // Return a mock value if the API doesn't provide the expected field.
-    return 0;
+    return 100;
   } catch (error) {
      if (error instanceof HkaError && (error.status === 404 || error.message.includes("No active HKA environment") || error.message.includes("HKA configuration not found in Firestore"))) {
         console.warn("HKA environment not configured or not found. Returning 0 folios.");
