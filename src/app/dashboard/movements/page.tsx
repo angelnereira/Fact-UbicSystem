@@ -250,7 +250,7 @@ export default function MovementsPage() {
           title="Latencia de API"
           value={`${mockApiHealth.latency}ms`}
           icon={Activity}
-          description={`Tasa de Error: ${mockApiealth.errorRate}%`}
+          description={`Tasa de Error: ${mockApiHealth.errorRate}%`}
         />
       </div>
 
