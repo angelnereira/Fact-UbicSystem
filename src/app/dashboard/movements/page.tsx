@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -13,8 +14,8 @@ import {
   FileText,
   Loader2,
 } from "lucide-react";
-import { collection, query, orderBy, limit } from "firebase/firestore";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { collection, query, orderBy, limit, doc, setDoc } from "firebase/firestore";
+import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, addDocumentNonBlocking } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -54,7 +55,18 @@ type InvoiceSubmission = {
 type Configuration = {
   id: string;
   webhookIdentifier?: string;
-}
+  // Añadimos otros campos que puedan existir para que el tipo sea más completo
+  companyName?: string;
+  taxId?: string;
+  fiscalAddress?: string;
+  demoEnabled?: boolean;
+  demoTokenEmpresa?: string;
+  demoTokenPassword?: string;
+  prodEnabled?: boolean;
+  prodTokenEmpresa?: string;
+  prodTokenPassword?: string;
+};
+
 
 const statusTranslations: { [key: string]: string } = {
   pending: "Pendiente",
@@ -87,26 +99,29 @@ export default function MovementsPage() {
   const [isAutomationOn, setIsAutomationOn] = useState(true);
   const [folios, setFolios] = useState(0);
   const [isLoadingFolios, setIsLoadingFolios] = useState(true);
-  const [webhookUrl, setWebhookUrl] = useState("");
+  const [webhookIdentifier, setWebhookIdentifier] = useState('');
+  const [isSavingIdentifier, setIsSavingIdentifier] = useState(false);
   
   const firestore = useFirestore();
 
-  // Lee la configuración para obtener el identificador del webhook
   const configurationsQuery = useMemoFirebase(() =>
     firestore ? query(collection(firestore, "configurations"), limit(1)) : null,
     [firestore]
   );
-  const { data: configData } = useCollection<Configuration>(configurationsQuery);
+  const { data: configData, isLoading: isConfigLoading } = useCollection<Configuration>(configurationsQuery);
   const existingConfig = configData?.[0];
+
+  const fullWebhookUrl = webhookIdentifier
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/invoices/${webhookIdentifier}`
+    : "Aún no configurado.";
 
   useEffect(() => {
     if (existingConfig?.webhookIdentifier) {
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        setWebhookUrl(`${origin}/api/webhooks/invoices/${existingConfig.webhookIdentifier}`);
-    } else {
-        setWebhookUrl("Aún no configurado. Guárdalo en la página de configuración.");
+      setWebhookIdentifier(existingConfig.webhookIdentifier);
+    } else if (!isConfigLoading) {
+      setWebhookIdentifier(''); // Limpia si no hay config
     }
-}, [existingConfig]);
+  }, [existingConfig, isConfigLoading]);
 
 
   useEffect(() => {
@@ -147,11 +162,60 @@ export default function MovementsPage() {
   const { data: movements, isLoading } = useCollection<InvoiceSubmission>(submissionsQuery);
 
   const copyToClipboard = () => {
-    if(webhookUrl.startsWith("http")) {
-      navigator.clipboard.writeText(webhookUrl);
+    if(fullWebhookUrl.startsWith("http")) {
+      navigator.clipboard.writeText(fullWebhookUrl);
       toast({ title: "¡Copiado!", description: "URL del webhook copiada al portapapeles." });
     }
   };
+
+  const handleSaveIdentifier = async () => {
+    if (!firestore) return;
+    if (!webhookIdentifier.match(/^[a-z0-9-]+$/)) {
+      toast({
+        variant: "destructive",
+        title: "Identificador no válido",
+        description: "Usa solo letras minúsculas, números y guiones.",
+      });
+      return;
+    }
+    
+    setIsSavingIdentifier(true);
+    try {
+      if (existingConfig?.id) {
+        const configDocRef = doc(firestore, "configurations", existingConfig.id);
+        await updateDocumentNonBlocking(configDocRef, { webhookIdentifier });
+      } else {
+        // Si no existe config, crea una nueva con valores por defecto.
+        const newConfig = {
+          webhookIdentifier,
+          companyName: "Mi Empresa",
+          taxId: "",
+          fiscalAddress: "",
+          demoEnabled: true,
+          demoTokenEmpresa: "",
+          demoTokenPassword: "",
+          prodEnabled: false,
+          prodTokenEmpresa: "",
+          prodTokenPassword: ""
+        };
+        const configurationsCollection = collection(firestore, "configurations");
+        await addDocumentNonBlocking(configurationsCollection, newConfig);
+      }
+      toast({
+        title: "¡Guardado!",
+        description: "El identificador del webhook ha sido actualizado.",
+      });
+    } catch (error: any) {
+       toast({
+        variant: "destructive",
+        title: "Error al Guardar",
+        description: error.message || "No se pudo actualizar el identificador.",
+      });
+    } finally {
+      setIsSavingIdentifier(false);
+    }
+  };
+
 
   const renderTableContent = () => {
     if (isLoading) {
@@ -285,13 +349,33 @@ export default function MovementsPage() {
                   Tu endpoint de webhook personalizado está listo para recibir facturas.
                 </p>
                 <div className="flex w-full max-w-lg items-center space-x-2">
-                  <Input type="text" value={webhookUrl} readOnly />
+                   <div className="flex items-center flex-grow">
+                     <span className="rounded-l-md border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                       {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/invoices/`}
+                     </span>
+                     <Input
+                        type="text"
+                        placeholder="tu-identificador"
+                        className="rounded-l-none"
+                        value={webhookIdentifier}
+                        onChange={(e) => setWebhookIdentifier(e.target.value)}
+                        disabled={isConfigLoading || isSavingIdentifier}
+                      />
+                   </div>
+                  <Button
+                    type="button"
+                    onClick={handleSaveIdentifier}
+                    disabled={isSavingIdentifier || isConfigLoading || webhookIdentifier === (existingConfig?.webhookIdentifier || '')}
+                  >
+                    {isSavingIdentifier ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                    Guardar
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     onClick={copyToClipboard}
-                    disabled={!webhookUrl.startsWith("http")}
+                    disabled={!fullWebhookUrl.startsWith("http")}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
