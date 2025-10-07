@@ -18,14 +18,17 @@ export const metadata: Metadata = {
   title: "Dashboard | Fact-UbicSystem",
 };
 
+// Make the component async to fetch data on the server
 export default async function DashboardPage() {
   let remainingFolios = 0;
+  let foliosError = false;
   try {
-    // Se intenta obtener los folios reales desde la API
+    // This now reads credentials from Firestore dynamically
     remainingFolios = await consultarFolios();
   } catch (error) {
     console.error("Error al consultar folios para el dashboard:", error);
-    // Si falla, se mantiene en 0 para no romper la UI.
+    foliosError = true;
+    // The function will return a mock value or 0 on error, so UI won't break
   }
 
   return (
@@ -51,10 +54,10 @@ export default async function DashboardPage() {
         />
         <StatCard
           title="Conexión HKA"
-          value="Conectado"
+          value={foliosError ? "Error" : "Conectado"}
           icon={PlugZap}
-          description="Conexión segura a The Factory HKA."
-          status="success"
+          description={foliosError ? "Fallo al conectar con HKA" : "Conexión segura a The Factory HKA."}
+          status={foliosError ? "danger" : "success"}
         />
         <StatCard
           title="Folios Restantes"

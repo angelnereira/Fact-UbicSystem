@@ -89,6 +89,7 @@ export default function MovementsPage() {
     async function fetchFolios() {
       setIsLoadingFolios(true);
       try {
+        // This now reads credentials from Firestore dynamically
         const remainingFolios = await consultarFolios();
         setFolios(remainingFolios);
       } catch (error) {
@@ -96,9 +97,9 @@ export default function MovementsPage() {
         toast({
           variant: "destructive",
           title: "Error de Conexión",
-          description: "No se pudieron obtener los folios restantes.",
+          description: "No se pudieron obtener los folios. Verifica tu configuración de HKA.",
         });
-        setFolios(0); // Muestra 0 en caso de error
+        setFolios(0); // Show 0 on error
       } finally {
         setIsLoadingFolios(false);
       }

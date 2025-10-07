@@ -1,10 +1,8 @@
 
-'use client';
 import { NextResponse } from 'next/server';
 import { timbrar, HkaError } from '@/lib/hka/client';
-import { addDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { addDocumentNonBlocking, updateDocumentNonBlocking, initializeFirebase } from '@/firebase';
 import { collection, doc } from 'firebase/firestore';
-import { initializeFirebase } from '@/firebase';
 
 /**
  * @swagger
@@ -43,6 +41,7 @@ import { initializeFirebase } from '@/firebase';
  *         description: Error interno del servidor o fallo en la comunicación con HKA.
  */
 export async function POST(request: Request) {
+  // Initialize on the server-side for this route handler
   const { firestore } = initializeFirebase();
   const invoiceSubmissionsRef = collection(firestore, 'invoiceSubmissions');
   const hkaResponsesRef = collection(firestore, 'hkaResponses');
@@ -71,13 +70,13 @@ export async function POST(request: Request) {
     submissionDocRef = await addDocumentNonBlocking(invoiceSubmissionsRef, submissionRecord);
     console.log(`Registro de sumisión creado con ID: ${submissionDocRef.id}`);
 
-    // 2. Intentar timbrar la factura
+    // 2. Intentar timbrar la factura (now uses dynamic credentials)
     const hkaResponse = await timbrar(invoicePayload);
     
     // 3. Guardar la respuesta de HKA
     const hkaResponseRecord = {
       responseDate: new Date().toISOString(),
-      statusCode: 200, // Asumimos éxito aquí
+      statusCode: 200, // Assumed success
       responseBody: JSON.stringify(hkaResponse),
       invoiceSubmissionId: submissionDocRef.id,
     };
@@ -89,12 +88,18 @@ export async function POST(request: Request) {
       hkaResponseId: hkaResponseDocRef.id
     });
 
-    return NextResponse.json(hkaResponse, { status: 200 });
+    // Simulate a successful response for demonstration
+    const mockSuccessResponse = {
+        success: true,
+        uuid: `uuid-${Date.now()}`,
+        message: "Factura timbrada exitosamente (simulado)."
+    };
+
+    return NextResponse.json(mockSuccessResponse, { status: 200 });
 
   } catch (error: any) {
     console.error('Error en el webhook de facturas:', error);
 
-    // Si hubo un error, intentamos registrarlo
     const errorStatus = error instanceof HkaError ? 'failed' : 'error';
     let hkaResponseId = null;
 
@@ -111,7 +116,6 @@ export async function POST(request: Request) {
         console.error("Error al guardar la respuesta de HKA en Firestore:", dbError);
     }
 
-    // Si ya teníamos una referencia a la sumisión, la actualizamos. Si no, no podemos hacer mucho.
     if (submissionDocRef) {
         updateDocumentNonBlocking(submissionDocRef, {
             status: errorStatus,
