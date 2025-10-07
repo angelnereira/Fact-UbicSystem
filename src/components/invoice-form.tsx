@@ -5,8 +5,6 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { PlusCircle, Trash2, Loader2, Upload } from "lucide-react";
 import convert from "xml-js";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, query, limit } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -45,26 +43,12 @@ const invoiceFormSchema = z.object({
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
-type Configuration = {
-  id: string;
-  webhookIdentifier?: string;
-};
-
 const defaultValues: Partial<InvoiceFormValues> = {
   items: [{ desc: "", qty: 1, unitPrice: 0 }],
 };
 
 export function InvoiceForm() {
   const { toast } = useToast();
-  const firestore = useFirestore();
-
-  const configurationsQuery = useMemoFirebase(() =>
-    firestore ? query(collection(firestore, "configurations"), limit(1)) : null,
-    [firestore]
-  );
-  const { data: configData } = useCollection<Configuration>(configurationsQuery);
-  const webhookIdentifier = configData?.[0]?.webhookIdentifier;
-
 
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
@@ -140,25 +124,15 @@ export function InvoiceForm() {
   };
 
   async function onSubmit(data: InvoiceFormValues) {
-    if (!webhookIdentifier) {
-       toast({
-        variant: "destructive",
-        title: "Configuración Incompleta",
-        description: "No se ha configurado un identificador de webhook. Por favor, configúralo en la página de Movimientos.",
-      });
-      return;
-    }
-
-    form.control.register('items'); // Ensure array is in form state
     const payload = { invoice: data };
     
     toast({
-      title: "Enviando Factura...",
-      description: "Enviando tu factura al webhook para ser procesada y registrada.",
+      title: "Timbrando Factura...",
+      description: "Enviando tu factura para ser procesada y timbrada.",
     });
 
     try {
-      const response = await fetch(`/api/webhooks/invoices/${webhookIdentifier}`, {
+      const response = await fetch(`/api/hka/timbrar`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -173,8 +147,8 @@ export function InvoiceForm() {
       }
       
       toast({
-        title: "Factura Enviada Exitosamente",
-        description: `Tu factura ha sido recibida y se ha creado un registro de envío. (ID: ${data.externalId})`,
+        title: "Factura Timbrada Exitosamente",
+        description: `Factura con UUID: ${result.uuid}`,
       });
 
       form.reset();
@@ -186,7 +160,7 @@ export function InvoiceForm() {
         toast({
           variant: "destructive",
           title: "Envío Fallido",
-          description: error.message || "No se pudo enviar la factura al webhook.",
+          description: error.message || "No se pudo enviar la factura para timbrar.",
       });
     }
   }
@@ -375,7 +349,7 @@ export function InvoiceForm() {
                     <span className="font-mono text-right w-24">${total.toFixed(2)}</span>
                 </p>
             </div>
-            <Button type="submit" disabled={form.formState.isSubmitting || !webhookIdentifier}>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
                 {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Crear Factura
             </Button>

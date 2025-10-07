@@ -5,7 +5,7 @@
  * It dynamically fetches credentials from Firestore for each request,
  * handles request retries, and provides typed functions for API operations.
  */
-import { initializeFirebase as initializeServerFirebase } from '@/firebase/server';
+import { initializeFirebase } from '@/firebase/server';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 // --- Types and Error Classes ---
@@ -48,19 +48,23 @@ interface ApiConfig {
  */
 async function getActiveHkaConfig(identifier?: string): Promise<ApiConfig> {
   // Explicitly use the server-side initialization
-  const { firestore } = initializeServerFirebase();
+  const { firestore } = initializeFirebase();
   const configCollection = collection(firestore, "configurations");
   
-  const q = identifier 
-    ? query(configCollection, where("webhookIdentifier", "==", identifier), limit(1))
-    : query(configCollection, limit(1));
+  let q;
+  if (identifier) {
+    q = query(configCollection, where("webhookIdentifier", "==", identifier), limit(1));
+  } else {
+    // If no identifier, fetch any available config (for manual operations)
+    q = query(configCollection, limit(1));
+  }
 
   const querySnapshot = await getDocs(q);
 
   if (querySnapshot.empty) {
     const errorMsg = identifier
       ? `No configuration found for webhook identifier: ${identifier}`
-      : "HKA configuration not found in Firestore.";
+      : "HKA configuration not found in Firestore. Please configure it in the settings page.";
     throw new HkaError({ message: errorMsg, status: 404 });
   }
   
@@ -186,8 +190,10 @@ export interface HkaStatus {
 
 /**
  * Stamps an invoice (timbrar).
+ * @param payload The invoice data object.
+ * @param identifier Optional webhook identifier. If not provided, it's a manual submission.
  */
-export function timbrar(payload: object, identifier: string): Promise<HkaResponse> {
+export function timbrar(payload: object, identifier?: string): Promise<HkaResponse> {
   const xmlBody = convertInvoiceToXml(payload);
   return request("/invoices/timbrar", {
     method: "POST",
