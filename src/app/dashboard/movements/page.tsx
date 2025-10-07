@@ -14,7 +14,7 @@ import {
   FileText,
   Loader2,
 } from "lucide-react";
-import { collection, query, orderBy, limit, doc, setDoc } from "firebase/firestore";
+import { collection, query, orderBy, limit, doc } from "firebase/firestore";
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, addDocumentNonBlocking } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { StatCard } from "@/components/stat-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { consultarFolios } from "@/lib/hka/client";
 
 // Tipado para los datos que vienen de Firestore
 type InvoiceSubmission = {
@@ -97,8 +96,6 @@ const mockApiHealth = {
 export default function MovementsPage() {
   const { toast } = useToast();
   const [isAutomationOn, setIsAutomationOn] = useState(true);
-  const [folios, setFolios] = useState(0);
-  const [isLoadingFolios, setIsLoadingFolios] = useState(true);
   const [webhookIdentifier, setWebhookIdentifier] = useState('');
   const [isSavingIdentifier, setIsSavingIdentifier] = useState(false);
   
@@ -122,30 +119,6 @@ export default function MovementsPage() {
       setWebhookIdentifier(''); // Limpia si no hay config
     }
   }, [existingConfig, isConfigLoading]);
-
-
-  useEffect(() => {
-    async function fetchFolios() {
-      setIsLoadingFolios(true);
-      try {
-        const remainingFolios = await consultarFolios();
-        setFolios(remainingFolios);
-      } catch (error) {
-        console.error("Error al consultar folios en MovementsPage:", error);
-        toast({
-          variant: "destructive",
-          title: "Error de Conexión",
-          description: "No se pudieron obtener los folios. Verifica tu configuración de HKA.",
-        });
-        setFolios(0);
-      } finally {
-        setIsLoadingFolios(false);
-      }
-    }
-
-    fetchFolios();
-  }, [toast]);
-
 
   const submissionsQuery = useMemoFirebase(
     () =>
@@ -306,7 +279,7 @@ export default function MovementsPage() {
         />
         <StatCard
           title="Folios Restantes"
-          value={isLoadingFolios ? "Cargando..." : folios.toLocaleString()}
+          value={"Cargando..."}
           icon={FileText}
           description="Folios disponibles para timbrar."
         />
