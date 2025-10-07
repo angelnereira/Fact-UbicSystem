@@ -134,10 +134,19 @@ export default function MovementsPage() {
   
   const { data: movements, isLoading } = useCollection<InvoiceSubmission>(submissionsQuery);
 
-  const copyToClipboard = () => {
-    if(fullWebhookUrl.startsWith("http")) {
-      navigator.clipboard.writeText(fullWebhookUrl);
+  const copyToClipboard = async () => {
+    if (!fullWebhookUrl.startsWith("http")) return;
+
+    try {
+      await navigator.clipboard.writeText(fullWebhookUrl);
       toast({ title: "¡Copiado!", description: "URL del webhook copiada al portapapeles." });
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+      toast({
+        variant: "destructive",
+        title: "Copia Fallida",
+        description: "No se pudo copiar la URL. Es posible que tu navegador no lo permita en este contexto.",
+      });
     }
   };
 
