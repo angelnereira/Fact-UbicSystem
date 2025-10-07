@@ -8,8 +8,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 
-import { useFirestore, useCollection, updateDocumentNonBlocking, addDocumentNonBlocking, useMemoFirebase } from "@/firebase";
-import { collection, query, limit, doc } from "firebase/firestore";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { collection, query, limit, doc, addDoc, setDoc } from "firebase/firestore";
 
 import { PageHeader } from "@/components/page-header";
 import {
@@ -45,17 +45,17 @@ const settingsSchema = z
     companyName: z.string().optional(),
     taxId: z.string().optional(),
     fiscalAddress: z.string().optional(),
-    webhookIdentifier: z.string().min(3, "El identificador debe tener al menos 3 caracteres.").regex(/^[a-z0-9-]+$/, "Usa solo letras minúsculas, números y guiones."),
+    webhookIdentifier: z.string().min(3, "El identificador debe tener al menos 3 caracteres.").regex(/^[a-z0-9-]+$/, "Usa solo letras minúsculas, números y guiones.").optional().or(z.literal('')),
     
     demoEnabled: z.boolean(),
-    demoTokenEmpresa: z.string(),
-    demoTokenPassword: z.string(),
-    demoApiUrl: z.string().url("Debe ser una URL válida."),
+    demoTokenEmpresa: z.string().optional(),
+    demoTokenPassword: z.string().optional(),
+    demoApiUrl: z.string().url("Debe ser una URL válida.").optional().or(z.literal('')),
 
     prodEnabled: z.boolean(),
-    prodTokenEmpresa: z.string(),
-    prodTokenPassword: z.string(),
-    prodApiUrl: z.string().url("Debe ser una URL válida."),
+    prodTokenEmpresa: z.string().optional(),
+    prodTokenPassword: z.string().optional(),
+    prodApiUrl: z.string().url("Debe ser una URL válida.").optional().or(z.literal('')),
   })
   .refine(
     (data) => {
@@ -99,7 +99,7 @@ export default function SettingsPage() {
     firestore ? query(collection(firestore, "configurations"), limit(1)) : null,
     [firestore]
   );
-  const { data: configData, isLoading: isConfigLoading } = useCollection<SettingsFormValues>(configurationsQuery);
+  const { data: configData, isLoading: isConfigLoading } = useCollection<SettingsFormValues & { id: string }>(configurationsQuery);
   const existingConfig = configData?.[0];
 
   const form = useForm<SettingsFormValues>({
@@ -142,11 +142,11 @@ export default function SettingsPage() {
         if (existingConfig?.id) {
             // Si ya existe una configuración, la actualizamos
             const configDocRef = doc(firestore, "configurations", existingConfig.id);
-            await updateDocumentNonBlocking(configDocRef, data);
+            await setDoc(configDocRef, data, { merge: true });
         } else {
             // Si no existe, creamos una nueva
             const configurationsCollection = collection(firestore, "configurations");
-            await addDocumentNonBlocking(configurationsCollection, data);
+            await addDoc(configurationsCollection, data);
         }
 
         toast({
@@ -238,7 +238,7 @@ export default function SettingsPage() {
                     <FormItem>
                       <FormLabel>Nombre de la Empresa</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -251,7 +251,7 @@ export default function SettingsPage() {
                     <FormItem>
                       <FormLabel>ID Fiscal (RFC)</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -265,7 +265,7 @@ export default function SettingsPage() {
                     <FormItem>
                       <FormLabel>Dirección Fiscal</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -282,7 +282,7 @@ export default function SettingsPage() {
                           URL del Webhook:
                         </span>
                         <FormControl>
-                          <Input className="rounded-l-none" placeholder="mi-empresa-unica" {...field} />
+                          <Input className="rounded-l-none" placeholder="mi-empresa-unica" {...field} value={field.value ?? ''} />
                         </FormControl>
                       </div>
                       <FormDescription>
@@ -335,7 +335,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <FormLabel>Token Empresa</FormLabel>
                         <FormControl>
-                          <Input placeholder="demo-token-empresa" {...field} />
+                          <Input placeholder="demo-token-empresa" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -348,7 +348,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <FormLabel>Token Password</FormLabel>
                         <FormControl>
-                          <Input type="password" {...field} />
+                          <Input type="password" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -361,7 +361,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <FormLabel>URL de API de Demo</FormLabel>
                         <FormControl>
-                          <Input placeholder="https://api.hka.demo.example" {...field} />
+                          <Input placeholder="https://api.hka.demo.example" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -396,7 +396,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <FormLabel>Token Empresa</FormLabel>
                         <FormControl>
-                          <Input placeholder="prod-token-empresa" {...field} />
+                          <Input placeholder="prod-token-empresa" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -409,7 +409,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <FormLabel>Token Password</FormLabel>
                         <FormControl>
-                          <Input type="password" {...field} />
+                          <Input type="password" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -422,7 +422,7 @@ export default function SettingsPage() {
                       <FormItem>
                         <FormLabel>URL de API de Producción</FormLabel>
                         <FormControl>
-                          <Input placeholder="https://api.hka.production.example" {...field} />
+                          <Input placeholder="https://api.hka.production.example" {...field} value={field.value ?? ''} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

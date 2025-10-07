@@ -14,7 +14,7 @@ import {
   FileText,
   Loader2,
 } from "lucide-react";
-import { collection, query, orderBy, limit, doc } from "firebase/firestore";
+import { collection, query, orderBy, limit, doc, getDocs, where } from "firebase/firestore";
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, addDocumentNonBlocking } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
@@ -98,27 +98,45 @@ export default function MovementsPage() {
   const [isAutomationOn, setIsAutomationOn] = useState(true);
   const [webhookIdentifier, setWebhookIdentifier] = useState('');
   const [isSavingIdentifier, setIsSavingIdentifier] = useState(false);
+  const [isLoadingIdentifier, setIsLoadingIdentifier] = useState(true);
+  const [configId, setConfigId] = useState<string | null>(null);
   
   const firestore = useFirestore();
 
-  const configurationsQuery = useMemoFirebase(() =>
-    firestore ? query(collection(firestore, "configurations"), limit(1)) : null,
-    [firestore]
-  );
-  const { data: configData, isLoading: isConfigLoading } = useCollection<Configuration>(configurationsQuery);
-  const existingConfig = configData?.[0];
+  useEffect(() => {
+    async function fetchConfig() {
+      if (!firestore) return;
+      setIsLoadingIdentifier(true);
+      const configCollection = collection(firestore, "configurations");
+      const q = query(configCollection, limit(1));
+      try {
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const configDoc = querySnapshot.docs[0];
+          setWebhookIdentifier(configDoc.data().webhookIdentifier || '');
+          setConfigId(configDoc.id);
+        } else {
+          setWebhookIdentifier('');
+          setConfigId(null);
+        }
+      } catch (error) {
+        console.error("Error fetching configuration:", error);
+        toast({
+          variant: "destructive",
+          title: "Error de Configuración",
+          description: "No se pudo cargar la configuración del webhook."
+        });
+      } finally {
+        setIsLoadingIdentifier(false);
+      }
+    }
+    fetchConfig();
+  }, [firestore, toast]);
+
 
   const fullWebhookUrl = webhookIdentifier
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/invoices/${webhookIdentifier}`
     : "Aún no configurado.";
-
-  useEffect(() => {
-    if (existingConfig?.webhookIdentifier) {
-      setWebhookIdentifier(existingConfig.webhookIdentifier);
-    } else if (!isConfigLoading) {
-      setWebhookIdentifier(''); // Limpia si no hay config
-    }
-  }, [existingConfig, isConfigLoading]);
 
   const submissionsQuery = useMemoFirebase(
     () =>
@@ -152,7 +170,7 @@ export default function MovementsPage() {
 
   const handleSaveIdentifier = async () => {
     if (!firestore) return;
-    if (!webhookIdentifier.match(/^[a-z0-9-]+$/)) {
+    if (webhookIdentifier && !webhookIdentifier.match(/^[a-z0-9-]+$/)) {
       toast({
         variant: "destructive",
         title: "Identificador no válido",
@@ -163,11 +181,10 @@ export default function MovementsPage() {
     
     setIsSavingIdentifier(true);
     try {
-      if (existingConfig?.id) {
-        const configDocRef = doc(firestore, "configurations", existingConfig.id);
+      if (configId) {
+        const configDocRef = doc(firestore, "configurations", configId);
         await updateDocumentNonBlocking(configDocRef, { webhookIdentifier });
       } else {
-        // Si no existe config, crea una nueva con valores por defecto.
         const newConfig = {
           webhookIdentifier,
           companyName: "Mi Empresa",
@@ -181,7 +198,8 @@ export default function MovementsPage() {
           prodTokenPassword: ""
         };
         const configurationsCollection = collection(firestore, "configurations");
-        await addDocumentNonBlocking(configurationsCollection, newConfig);
+        const newDocRef = await addDocumentNonBlocking(configurationsCollection, newConfig);
+        setConfigId(newDocRef.id);
       }
       toast({
         title: "¡Guardado!",
@@ -341,13 +359,13 @@ export default function MovementsPage() {
                         className="rounded-l-none"
                         value={webhookIdentifier}
                         onChange={(e) => setWebhookIdentifier(e.target.value)}
-                        disabled={isConfigLoading || isSavingIdentifier}
+                        disabled={isLoadingIdentifier || isSavingIdentifier}
                       />
                    </div>
                   <Button
                     type="button"
                     onClick={handleSaveIdentifier}
-                    disabled={isSavingIdentifier || isConfigLoading || webhookIdentifier === (existingConfig?.webhookIdentifier || '')}
+                    disabled={isSavingIdentifier || isLoadingIdentifier}
                   >
                     {isSavingIdentifier ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
                     Guardar
@@ -482,3 +500,5 @@ export default function MovementsPage() {
     </main>
   );
 }
+
+    
