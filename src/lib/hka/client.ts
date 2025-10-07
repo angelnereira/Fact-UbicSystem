@@ -227,14 +227,14 @@ export async function consultarFolios(identifier?: string): Promise<number> {
       return response.remaining_folios;
     }
     // Return a mock value if the API doesn't provide the expected field.
-    return 742; 
+    return 0;
   } catch (error) {
-     if (error instanceof HkaError && (error.status === 404 || error.message.includes("No active HKA environment"))) {
+     if (error instanceof HkaError && (error.status === 404 || error.message.includes("No active HKA environment") || error.message.includes("HKA configuration not found in Firestore"))) {
         console.warn("HKA environment not configured or not found. Returning 0 folios.");
         return 0;
      }
      // For any other error during development/testing, return a mock value to avoid breaking the UI.
      console.error("Failed to fetch folios, returning mock value.", error);
-     return 742;
+     return 0;
   }
 }
