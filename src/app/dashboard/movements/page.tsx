@@ -121,7 +121,7 @@ export default function MovementsPage() {
       return (
         <TableRow>
           <TableCell colSpan={5} className="h-24 text-center">
-            No hay movimientos registrados todavía.
+            <div>No hay movimientos registrados todavía.</div>
           </TableCell>
         </TableRow>
       );
