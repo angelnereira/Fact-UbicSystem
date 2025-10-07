@@ -12,9 +12,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
+import { useToast } from "@/hooks/use-toast";
 
 type RucResult = {
-  status: 'found' | 'not_found';
+  status: 'found' | 'not_found' | 'error';
   name?: string;
   ruc?: string;
   address?: string;
@@ -26,6 +27,7 @@ export default function ConsultRucPage() {
   const [ruc, setRuc] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<RucResult | null>(null);
+  const { toast } = useToast();
 
   const handleConsult = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,43 +36,46 @@ export default function ConsultRucPage() {
     setIsLoading(true);
     setResult(null);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    try {
+      const response = await fetch(`/api/consult/ruc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruc }),
+      });
 
-    // Mocked responses
-    const isFound = Math.random() > 0.3;
-    let mockResponse: RucResult;
+      const data: RucResult = await response.json();
 
-    if (isFound) {
-      mockResponse = {
-        status: 'found',
-        name: 'ACME S.A.C.',
-        ruc: ruc,
-        address: 'Av. Principal 123, San Isidro, Lima',
-        isTaxpayer: true,
-        message: 'Contribuyente encontrado y activo.'
-      };
-    } else {
-      mockResponse = {
-        status: 'not_found',
-        message: `No se encontró contribuyente con RUC ${ruc}.`
-      };
+      if (!response.ok) {
+        throw new Error(data.message || 'Error en la consulta');
+      }
+
+      setResult(data);
+
+    } catch (error: any) {
+       toast({
+        variant: "destructive",
+        title: "Error de Consulta",
+        description: error.message || "No se pudo completar la consulta de RUC.",
+      });
+       setResult({
+        status: 'error',
+        message: error.message || "No se pudo completar la consulta de RUC."
+       });
+    } finally {
+      setIsLoading(false);
     }
-    
-    setResult(mockResponse);
-    setIsLoading(false);
   };
 
   const renderResult = () => {
     if (!result) return null;
 
-    if (result.status === 'not_found') {
+    if (result.status === 'not_found' || result.status === 'error') {
       return (
         <Card className="mt-6 border-orange-500/50">
           <CardHeader className="flex flex-row items-start gap-4 space-y-0">
             <AlertCircle className="mt-1 h-6 w-6 text-orange-600" />
             <div className="flex-1">
-              <CardTitle className="text-orange-600">No Encontrado</CardTitle>
+              <CardTitle className="text-orange-600">{result.status === 'not_found' ? 'No Encontrado' : 'Error'}</CardTitle>
               <CardDescription>{result.message}</CardDescription>
             </div>
           </CardHeader>

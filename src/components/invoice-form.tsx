@@ -5,6 +5,8 @@ import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { PlusCircle, Trash2, Loader2, Upload } from "lucide-react";
 import convert from "xml-js";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { collection, query, limit } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -43,12 +45,27 @@ const invoiceFormSchema = z.object({
 
 type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
+type Configuration = {
+  id: string;
+  webhookIdentifier?: string;
+};
+
 const defaultValues: Partial<InvoiceFormValues> = {
   items: [{ desc: "", qty: 1, unitPrice: 0 }],
 };
 
 export function InvoiceForm() {
   const { toast } = useToast();
+  const firestore = useFirestore();
+
+  const configurationsQuery = useMemoFirebase(() =>
+    firestore ? query(collection(firestore, "configurations"), limit(1)) : null,
+    [firestore]
+  );
+  const { data: configData } = useCollection<Configuration>(configurationsQuery);
+  const webhookIdentifier = configData?.[0]?.webhookIdentifier;
+
+
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
     defaultValues,
@@ -104,6 +121,15 @@ export function InvoiceForm() {
   };
 
   async function onSubmit(data: InvoiceFormValues) {
+    if (!webhookIdentifier) {
+       toast({
+        variant: "destructive",
+        title: "Configuración Incompleta",
+        description: "No se ha configurado un identificador de webhook. Por favor, configúralo en la página de Movimientos.",
+      });
+      return;
+    }
+
     form.control.register('items'); // Ensure array is in form state
     const payload = { invoice: data };
     
@@ -113,8 +139,7 @@ export function InvoiceForm() {
     });
 
     try {
-      // Simulate fetch to /api/webhooks/invoices
-      const response = await fetch("/api/webhooks/invoices", {
+      const response = await fetch(`/api/webhooks/invoices/${webhookIdentifier}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -122,20 +147,22 @@ export function InvoiceForm() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        // In a real scenario, you might get a more detailed error
-        const errorData = await response.json().catch(() => ({ message: 'Ocurrió un error desconocido' }));
-        throw new Error(errorData.message || `La solicitud falló con estado ${response.status}`);
-      }
-      
       const result = await response.json();
 
+      if (!response.ok) {
+        throw new Error(result.message || `La solicitud falló con estado ${response.status}`);
+      }
+      
       toast({
         title: "Factura Enviada Exitosamente",
-        description: `Tu factura ha sido recibida. (ID: ${data.externalId})`,
+        description: `Tu factura ha sido recibida y está siendo procesada. (ID: ${data.externalId})`,
       });
-      console.log("Respuesta simulada:", result);
+
       form.reset();
+      // Reset items array to default
+      remove();
+      append({ desc: "", qty: 1, unitPrice: 0 });
+
     } catch (error: any) {
         toast({
           variant: "destructive",
@@ -329,7 +356,7 @@ export function InvoiceForm() {
                     <span className="font-mono text-right w-24">${total.toFixed(2)}</span>
                 </p>
             </div>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
+            <Button type="submit" disabled={form.formState.isSubmitting || !webhookIdentifier}>
                 {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Crear Factura
             </Button>

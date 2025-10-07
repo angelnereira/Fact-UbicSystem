@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
+import { useToast } from "@/hooks/use-toast";
 
 type StatusResult = {
   status: 'stamped' | 'cancelled' | 'processing' | 'error' | 'not_found';
@@ -54,6 +55,7 @@ export default function InvoiceStatusPage() {
   const [invoiceId, setInvoiceId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<StatusResult | null>(null);
+  const { toast } = useToast();
 
   const handleCheckStatus = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,30 +64,32 @@ export default function InvoiceStatusPage() {
     setIsLoading(true);
     setResult(null);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    // Mocked responses
-    const responses: StatusResult[] = [
-      { status: 'stamped', message: 'La factura fue timbrada y validada exitosamente por la autoridad fiscal.', uuid: 'a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6', folio: invoiceId, timestamp: new Date().toISOString() },
-      { status: 'cancelled', message: 'Esta factura ha sido anulada exitosamente.', uuid: 'b2c3d4e5-f6g7-h8i9-j0k1-l2m3n4o5p6q7', folio: invoiceId, timestamp: new Date().toISOString() },
-      { status: 'processing', message: 'La factura ha sido recibida y se está procesando actualmente.', folio: invoiceId },
-      { status: 'error', message: 'Ocurrió un error durante el timbrado: "Código de item inválido".', folio: invoiceId },
-      { status: 'not_found', message: 'No se encontró ninguna factura con el ID especificado.', folio: invoiceId },
-    ];
-    
-    const mockResponse = responses[Math.floor(Math.random() * responses.length)];
-    setResult(mockResponse);
+    try {
+      const response = await fetch(`/api/hka/status/${invoiceId}`);
+      const data: StatusResult = await response.json();
 
-    setIsLoading(false);
+      if (!response.ok) {
+        throw new Error(data.message || 'Error en la consulta');
+      }
+
+      setResult(data);
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Error de Consulta',
+        description: error.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const renderResult = () => {
     if (!result) return null;
     
-    const Icon = statusInfo[result.status].icon;
-    const color = statusInfo[result.status].color;
-    const title = statusInfo[result.status].title;
+    const Icon = statusInfo[result.status]?.icon || AlertCircle;
+    const color = statusInfo[result.status]?.color || 'text-gray-500';
+    const title = statusInfo[result.status]?.title || 'Desconocido';
 
     return (
        <Card className="mt-6">

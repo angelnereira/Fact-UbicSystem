@@ -43,28 +43,35 @@ export default function CancelInvoicePage() {
     }
     setIsLoading(true);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+        const response = await fetch('/api/hka/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ invoiceId, reason }),
+        });
 
-    // Simulate success or failure
-    const isSuccess = Math.random() > 0.2; 
-    
-    if (isSuccess) {
-      toast({
-        title: "Anulación de Factura Enviada",
-        description: `La solicitud para anular la factura ${invoiceId} ha sido enviada.`,
-      });
-      setInvoiceId("");
-      setReason("");
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Fallo en la Anulación",
-        description: `No se pudo anular la factura ${invoiceId}. Por favor, inténtalo de nuevo.`,
-      });
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.message || 'Error desconocido del servidor');
+        }
+        
+        toast({
+            title: "Solicitud de Anulación Enviada",
+            description: `La solicitud para anular la factura ${invoiceId} ha sido procesada.`,
+        });
+        setInvoiceId("");
+        setReason("");
+
+    } catch (error: any) {
+        toast({
+            variant: "destructive",
+            title: "Fallo en la Anulación",
+            description: error.message || `No se pudo anular la factura ${invoiceId}.`,
+        });
+    } finally {
+        setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
@@ -112,7 +119,7 @@ export default function CancelInvoicePage() {
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
+                <AlertDialogTitle>¿Estás absolutely seguro?</AlertDialogTitle>
                 <AlertDialogDescription>
                   Esta acción es irreversible y enviará una solicitud formal de anulación para la factura{" "}
                   <strong>{invoiceId}</strong>. No se puede deshacer.
