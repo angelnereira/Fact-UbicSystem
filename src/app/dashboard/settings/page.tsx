@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 
-import { useFirestore, useCollection, updateDocumentNonBlocking, useMemoFirebase } from "@/firebase";
+import { useFirestore, useCollection, updateDocumentNonBlocking, addDocumentNonBlocking, useMemoFirebase } from "@/firebase";
 import { collection, query, limit, doc } from "firebase/firestore";
 
 import { PageHeader } from "@/components/page-header";
@@ -128,23 +128,39 @@ export default function SettingsPage() {
   }, [existingConfig, form]);
 
 
-  function onSubmit(data: SettingsFormValues) {
-    if (!firestore || !existingConfig?.id) {
+  async function onSubmit(data: SettingsFormValues) {
+    if (!firestore) {
         toast({
             variant: "destructive",
             title: "Error",
-            description: "No se pudo conectar a la base de datos o no existe configuración."
+            description: "No se pudo conectar a la base de datos."
         })
         return;
     }
 
-    const configDocRef = doc(firestore, "configurations", existingConfig.id);
-    updateDocumentNonBlocking(configDocRef, data);
+    try {
+        if (existingConfig?.id) {
+            // Si ya existe una configuración, la actualizamos
+            const configDocRef = doc(firestore, "configurations", existingConfig.id);
+            await updateDocumentNonBlocking(configDocRef, data);
+        } else {
+            // Si no existe, creamos una nueva
+            const configurationsCollection = collection(firestore, "configurations");
+            await addDocumentNonBlocking(configurationsCollection, data);
+        }
 
-    toast({
-      title: "¡Configuración Guardada!",
-      description: "Tu información de empresa y HKA ha sido actualizada.",
-    });
+        toast({
+          title: "¡Configuración Guardada!",
+          description: "Tu información de empresa y HKA ha sido actualizada.",
+        });
+
+    } catch (error: any) {
+        toast({
+            variant: "destructive",
+            title: "Error al Guardar",
+            description: error.message || "No se pudo guardar la configuración."
+        });
+    }
   }
   
   const handleValidateConnection = async () => {
@@ -436,3 +452,5 @@ export default function SettingsPage() {
     </main>
   );
 }
+
+    
