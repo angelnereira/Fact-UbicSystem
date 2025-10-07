@@ -43,9 +43,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const settingsSchema = z
   .object({
-    companyName: z.string().min(2, "El nombre de la empresa es requerido."),
-    taxId: z.string().min(6, "El ID fiscal es requerido."),
-    fiscalAddress: z.string().min(5, "La dirección fiscal es requerida."),
+    companyName: z.string().optional(),
+    taxId: z.string().optional(),
+    fiscalAddress: z.string().optional(),
     webhookIdentifier: z.string().min(3, "El identificador debe tener al menos 3 caracteres.").regex(/^[a-z0-9-]+$/, "Usa solo letras minúsculas, números y guiones."),
     
     demoEnabled: z.boolean(),
@@ -263,8 +263,8 @@ export default function SettingsPage() {
                     <FormItem>
                       <FormLabel>Identificador del Webhook</FormLabel>
                       <div className="flex items-center">
-                        <span className="rounded-l-md border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
-                          .../api/webhooks/invoices/
+                        <span className="rounded-l-md border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                          URL del Webhook:
                         </span>
                         <FormControl>
                           <Input className="rounded-l-none" placeholder="mi-empresa-unica" {...field} />
