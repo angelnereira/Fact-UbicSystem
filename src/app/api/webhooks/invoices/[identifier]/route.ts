@@ -1,8 +1,9 @@
 
 import { NextResponse } from 'next/server';
 import { timbrar, HkaError } from '@/lib/hka/client';
-import { addDocumentNonBlocking, updateDocumentNonBlocking, initializeFirebase } from '@/firebase';
-import { collection } from 'firebase/firestore';
+import { initializeFirebase } from '@/firebase/server';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
+
 
 /**
  * @swagger
@@ -44,12 +45,11 @@ import { collection } from 'firebase/firestore';
 export async function POST(request: Request, { params }: { params: { identifier: string } }) {
   const { identifier } = params;
   
-  // Initialize on the server-side for this route handler
   const { firestore } = initializeFirebase();
   const invoiceSubmissionsRef = collection(firestore, 'invoiceSubmissions');
   const hkaResponsesRef = collection(firestore, 'hkaResponses');
   
-  let submissionDocRef;
+  let submissionDocId: string | null = null;
 
   try {
     const body = await request.json();
@@ -70,7 +70,8 @@ export async function POST(request: Request, { params }: { params: { identifier:
       hkaResponseId: null,
     };
     
-    submissionDocRef = await addDocumentNonBlocking(invoiceSubmissionsRef, submissionRecord);
+    const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
+    submissionDocId = submissionDocRef.id;
 
     // 2. Intentar timbrar la factura (ahora usa credenciales dinámicas basadas en el identifier)
     const hkaResponse = await timbrar(invoicePayload, identifier);
@@ -80,12 +81,13 @@ export async function POST(request: Request, { params }: { params: { identifier:
       responseDate: new Date().toISOString(),
       statusCode: 200, // Assumed success
       responseBody: JSON.stringify(hkaResponse),
-      invoiceSubmissionId: submissionDocRef.id,
+      invoiceSubmissionId: submissionDocId,
     };
-    const hkaResponseDocRef = await addDocumentNonBlocking(hkaResponsesRef, hkaResponseRecord);
+    const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
 
     // 4. Actualizar la sumisión original con el estado 'certified' y el ID de la respuesta
-    updateDocumentNonBlocking(submissionDocRef, {
+    const submissionDocToUpdate = doc(firestore, 'invoiceSubmissions', submissionDocId);
+    await updateDoc(submissionDocToUpdate, {
       status: 'certified',
       hkaResponseId: hkaResponseDocRef.id
     });
@@ -100,23 +102,24 @@ export async function POST(request: Request, { params }: { params: { identifier:
     console.error(`Error en el webhook [${identifier}]:`, error);
 
     const errorStatus = error instanceof HkaError ? 'failed' : 'error';
-    let hkaResponseId = null;
+    let hkaResponseId: string | null = null;
 
     try {
         const hkaResponseRecord = {
             responseDate: new Date().toISOString(),
             statusCode: error.status || 500,
             responseBody: JSON.stringify(error.body || { message: error.message }),
-            invoiceSubmissionId: submissionDocRef ? submissionDocRef.id : null,
+            invoiceSubmissionId: submissionDocId,
         };
-        const hkaResponseDocRef = await addDocumentNonBlocking(hkaResponsesRef, hkaResponseRecord);
+        const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
         hkaResponseId = hkaResponseDocRef.id;
     } catch (dbError) {
         console.error("Error al guardar la respuesta de HKA en Firestore:", dbError);
     }
 
-    if (submissionDocRef) {
-        updateDocumentNonBlocking(submissionDocRef, {
+    if (submissionDocId) {
+        const submissionDocToUpdate = doc(firestore, 'invoiceSubmissions', submissionDocId);
+        await updateDoc(submissionDocToUpdate, {
             status: errorStatus,
             hkaResponseId: hkaResponseId,
         });
