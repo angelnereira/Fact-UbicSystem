@@ -5,7 +5,7 @@
  * It dynamically fetches credentials from Firestore for each request,
  * handles request retries, and provides typed functions for API operations.
  */
-import { initializeFirebase } from '@/firebase/server';
+import { initializeFirebase as initializeServerFirebase } from '@/firebase/server';
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 // --- Types and Error Classes ---
@@ -48,7 +48,7 @@ interface ApiConfig {
  */
 async function getActiveHkaConfig(identifier?: string): Promise<ApiConfig> {
   // Explicitly use the server-side initialization
-  const { firestore } = initializeFirebase();
+  const { firestore } = initializeServerFirebase();
   const configCollection = collection(firestore, "configurations");
   
   const q = identifier 
@@ -234,6 +234,6 @@ export async function consultarFolios(identifier?: string): Promise<number> {
      }
      // For any other error during development/testing, return a mock value to avoid breaking the UI.
      console.error("Failed to fetch folios, returning mock value.", error);
-     return 0;
+     throw error; // Re-throw the original error to be caught by the calling component
   }
 }
