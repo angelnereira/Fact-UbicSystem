@@ -2,18 +2,25 @@
 import { NextResponse } from 'next/server';
 import { timbrar, HkaError } from '@/lib/hka/client';
 import { addDocumentNonBlocking, updateDocumentNonBlocking, initializeFirebase } from '@/firebase';
-import { collection, doc } from 'firebase/firestore';
+import { collection } from 'firebase/firestore';
 
 /**
  * @swagger
- * /api/webhooks/invoices:
+ * /api/webhooks/invoices/{identifier}:
  *   post:
  *     summary: Recibe datos de una factura desde un sistema externo para timbrar.
  *     description: |
- *       Este endpoint de webhook está diseñado para ser llamado por sistemas externos (como un ERP)
- *       cuando se necesita procesar y timbrar una nueva factura. El payload debe contener la
- *       información de la factura. La ruta utiliza el módulo HKA para procesar la solicitud y
- *       guarda un registro tanto de la sumisión como de la respuesta en Firestore.
+ *       Este endpoint de webhook dinámico está diseñado para ser llamado por sistemas externos (como un ERP)
+ *       cuando se necesita procesar y timbrar una nueva factura. El `identifier` en la URL es un slug
+ *       único configurado por el usuario para identificar su empresa. El payload debe contener la
+ *       información de la factura.
+ *     parameters:
+ *       - in: path
+ *         name: identifier
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: El identificador único del webhook configurado por el usuario.
  *     requestBody:
  *       required: true
  *       content:
@@ -24,23 +31,19 @@ import { collection, doc } from 'firebase/firestore';
  *               invoice:
  *                 type: object
  *                 description: El objeto de la factura a timbrar.
- *                 example:
- *                   externalId: "ORD-2024-54321"
- *                   customerName: "Cliente de Ejemplo S.A."
- *                   customerRuc: "CE-12345678"
- *                   items:
- *                     - desc: "Servicio de Consultoría"
- *                       qty: 1
- *                       unitPrice: 500.00
  *     responses:
  *       '200':
  *         description: Factura procesada exitosamente por HKA.
  *       '400':
  *         description: Error de validación o datos faltantes.
+ *       '404':
+ *         description: No se encontró una configuración para el identificador proporcionado.
  *       '500':
  *         description: Error interno del servidor o fallo en la comunicación con HKA.
  */
-export async function POST(request: Request) {
+export async function POST(request: Request, { params }: { params: { identifier: string } }) {
+  const { identifier } = params;
+  
   // Initialize on the server-side for this route handler
   const { firestore } = initializeFirebase();
   const invoiceSubmissionsRef = collection(firestore, 'invoiceSubmissions');
@@ -68,10 +71,9 @@ export async function POST(request: Request) {
     };
     
     submissionDocRef = await addDocumentNonBlocking(invoiceSubmissionsRef, submissionRecord);
-    console.log(`Registro de sumisión creado con ID: ${submissionDocRef.id}`);
 
-    // 2. Intentar timbrar la factura (now uses dynamic credentials)
-    const hkaResponse = await timbrar(invoicePayload);
+    // 2. Intentar timbrar la factura (ahora usa credenciales dinámicas basadas en el identifier)
+    const hkaResponse = await timbrar(invoicePayload, identifier);
     
     // 3. Guardar la respuesta de HKA
     const hkaResponseRecord = {
@@ -88,17 +90,14 @@ export async function POST(request: Request) {
       hkaResponseId: hkaResponseDocRef.id
     });
 
-    // Simulate a successful response for demonstration
-    const mockSuccessResponse = {
+    return NextResponse.json({
         success: true,
         uuid: `uuid-${Date.now()}`,
-        message: "Factura timbrada exitosamente (simulado)."
-    };
-
-    return NextResponse.json(mockSuccessResponse, { status: 200 });
+        message: "Factura procesada y timbrada exitosamente."
+    }, { status: 200 });
 
   } catch (error: any) {
-    console.error('Error en el webhook de facturas:', error);
+    console.error(`Error en el webhook [${identifier}]:`, error);
 
     const errorStatus = error instanceof HkaError ? 'failed' : 'error';
     let hkaResponseId = null;
@@ -121,6 +120,10 @@ export async function POST(request: Request) {
             status: errorStatus,
             hkaResponseId: hkaResponseId,
         });
+    }
+
+    if (error.message.includes("No configuration found for webhook identifier")) {
+        return NextResponse.json({ message: error.message }, { status: 404 });
     }
 
     if (error instanceof HkaError) {

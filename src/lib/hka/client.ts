@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview
  * This module provides a client for interacting with The Factory HKA API.
@@ -42,19 +43,26 @@ interface ApiConfig {
 
 /**
  * Fetches the active HKA API configuration from Firestore.
- * It determines whether to use 'demo' or 'prod' credentials based on
- * which environment is enabled in the settings.
+ * It can find the configuration either by a unique webhook identifier or
+ * by default (fetching the first one if no identifier is provided).
+ * @param {string} [identifier] - The unique webhook identifier slug.
  * @returns {Promise<ApiConfig>} The active API configuration.
  */
-async function getActiveHkaConfig(): Promise<ApiConfig> {
+async function getActiveHkaConfig(identifier?: string): Promise<ApiConfig> {
   const { firestore } = initializeFirebase();
   const configCollection = collection(firestore, "configurations");
-  // Assuming a single configuration document for the system.
-  const q = query(configCollection, limit(1));
+  
+  const q = identifier 
+    ? query(configCollection, where("webhookIdentifier", "==", identifier), limit(1))
+    : query(configCollection, limit(1));
+
   const querySnapshot = await getDocs(q);
 
   if (querySnapshot.empty) {
-    throw new HkaError({ message: "HKA configuration not found in Firestore.", status: 500 });
+    const errorMsg = identifier
+      ? `No configuration found for webhook identifier: ${identifier}`
+      : "HKA configuration not found in Firestore.";
+    throw new HkaError({ message: errorMsg, status: 404 });
   }
   
   const configDoc = querySnapshot.docs[0].data();
@@ -62,13 +70,13 @@ async function getActiveHkaConfig(): Promise<ApiConfig> {
   if (configDoc.demoEnabled) {
     return {
       apiKey: configDoc.demoTokenPassword,
-      baseUrl: "https://api.hka.demo.example", // As per settings page
+      baseUrl: "https://api.hka.demo.example",
       env: "demo"
     };
   } else if (configDoc.prodEnabled) {
     return {
       apiKey: configDoc.prodTokenPassword,
-      baseUrl: "https://api.hka.production.example", // As per settings page
+      baseUrl: "https://api.hka.production.example",
       env: "prod"
     };
   } else {
@@ -86,9 +94,10 @@ const MAX_RETRIES = 2;
 async function request(
   path: string,
   opts: RequestInit = {},
+  identifier?: string,
   retries: number = 0
 ): Promise<any> {
-  const { apiKey, baseUrl } = await getActiveHkaConfig();
+  const { apiKey, baseUrl } = await getActiveHkaConfig(identifier);
   
   const url = `${baseUrl}${path}`;
   const options: RequestInit = {
@@ -104,11 +113,9 @@ async function request(
 
     if (!response.ok) {
       if (response.status >= 500 && retries < MAX_RETRIES) {
-        console.warn(
-          `HKA Request failed with status ${response.status}. Retrying... (Attempt ${retries + 1})`
-        );
+        console.warn(`HKA Request failed with status ${response.status}. Retrying... (Attempt ${retries + 1})`);
         await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retries)));
-        return request(path, opts, retries + 1);
+        return request(path, opts, identifier, retries + 1);
       }
 
       const errorBodyText = await response.text();
@@ -145,7 +152,7 @@ async function request(
     if (retries < MAX_RETRIES) {
       console.warn(`HKA Request failed with network error. Retrying... (Attempt ${retries + 1})`);
       await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retries)));
-      return request(path, opts, retries + 1);
+      return request(path, opts, identifier, retries + 1);
     }
     
     throw new HkaError({
@@ -181,56 +188,50 @@ export interface HkaStatus {
 /**
  * Stamps an invoice (timbrar).
  */
-export function timbrar(payload: object): Promise<HkaResponse> {
+export function timbrar(payload: object, identifier: string): Promise<HkaResponse> {
   const xmlBody = convertInvoiceToXml(payload);
   return request("/invoices/timbrar", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/xml",
-    },
+    headers: { "Content-Type": "application/xml" },
     body: xmlBody,
-  });
+  }, identifier);
 }
 
 /**
  * Queries the status of an invoice.
  */
-export function consultarEstado(uuidOrFolio: string): Promise<HkaStatus> {
-  return request(`/invoices/status/${uuidOrFolio}`, { method: "GET" });
+export function consultarEstado(uuidOrFolio: string, identifier?: string): Promise<HkaStatus> {
+  return request(`/invoices/status/${uuidOrFolio}`, { method: "GET" }, identifier);
 }
 
 /**
  * Cancels a previously stamped invoice.
  */
-export function anular(uuidOrFolio: string, reason: string): Promise<HkaResponse> {
+export function anular(uuidOrFolio: string, reason: string, identifier?: string): Promise<HkaResponse> {
   return request(`/invoices/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: uuidOrFolio, reason }),
-  });
+  }, identifier);
 }
 
 /**
  * Consults the number of remaining folios.
  */
-export async function consultarFolios(): Promise<number> {
-  // Simulate a successful response for demonstration in UI.
-  // The actual request logic is kept for when the endpoint is real.
+export async function consultarFolios(identifier?: string): Promise<number> {
   try {
-    const response = await request("/folios", { method: "GET" });
+    const response = await request("/folios", { method: "GET" }, identifier);
     if (typeof response?.remaining_folios !== "number") {
-      // In a real scenario, we'd throw. For the demo, we return a mock value.
       console.warn("Invalid response format for folios query. Returning mock value.");
-      return 742; // Mock value
+      return 742;
     }
     return response.remaining_folios;
   } catch (error) {
-     if (error instanceof HkaError && error.message.includes("No active HKA environment")) {
-        console.warn("HKA environment not configured. Returning 0 folios.");
+     if (error instanceof HkaError && (error.status === 404 || error.message.includes("No active HKA environment"))) {
+        console.warn("HKA environment not configured or not found. Returning 0 folios.");
         return 0;
      }
      console.error("Failed to fetch folios, returning mock value.", error);
-     // If the API call fails (e.g., 404), return a mock value for UI stability.
-     return 742; // Mock value
+     return 742;
   }
 }

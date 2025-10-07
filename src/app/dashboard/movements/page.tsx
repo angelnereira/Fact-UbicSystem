@@ -51,6 +51,11 @@ type InvoiceSubmission = {
   invoiceData: string;
 };
 
+type Configuration = {
+  id: string;
+  webhookIdentifier?: string;
+}
+
 const statusTranslations: { [key: string]: string } = {
   pending: "Pendiente",
   certified: "Certificada",
@@ -82,14 +87,32 @@ export default function MovementsPage() {
   const [isAutomationOn, setIsAutomationOn] = useState(true);
   const [folios, setFolios] = useState(0);
   const [isLoadingFolios, setIsLoadingFolios] = useState(true);
+  const [webhookUrl, setWebhookUrl] = useState("");
   
   const firestore = useFirestore();
+
+  // Lee la configuración para obtener el identificador del webhook
+  const configurationsQuery = useMemoFirebase(() =>
+    firestore ? query(collection(firestore, "configurations"), limit(1)) : null,
+    [firestore]
+  );
+  const { data: configData } = useCollection<Configuration>(configurationsQuery);
+  const existingConfig = configData?.[0];
+
+  useEffect(() => {
+    if (existingConfig?.webhookIdentifier) {
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        setWebhookUrl(`${origin}/api/webhooks/invoices/${existingConfig.webhookIdentifier}`);
+    } else {
+        setWebhookUrl("Aún no configurado. Guárdalo en la página de configuración.");
+    }
+}, [existingConfig]);
+
 
   useEffect(() => {
     async function fetchFolios() {
       setIsLoadingFolios(true);
       try {
-        // This now reads credentials from Firestore dynamically
         const remainingFolios = await consultarFolios();
         setFolios(remainingFolios);
       } catch (error) {
@@ -99,7 +122,7 @@ export default function MovementsPage() {
           title: "Error de Conexión",
           description: "No se pudieron obtener los folios. Verifica tu configuración de HKA.",
         });
-        setFolios(0); // Show 0 on error
+        setFolios(0);
       } finally {
         setIsLoadingFolios(false);
       }
@@ -123,11 +146,11 @@ export default function MovementsPage() {
   
   const { data: movements, isLoading } = useCollection<InvoiceSubmission>(submissionsQuery);
 
-  const webhookUrl = "https://example.com/api/webhooks/invoices";
-
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    toast({ title: "¡Copiado!", description: "URL del webhook copiada al portapapeles." });
+    if(webhookUrl.startsWith("http")) {
+      navigator.clipboard.writeText(webhookUrl);
+      toast({ title: "¡Copiado!", description: "URL del webhook copiada al portapapeles." });
+    }
   };
 
   const renderTableContent = () => {
@@ -227,7 +250,7 @@ export default function MovementsPage() {
           title="Latencia de API"
           value={`${mockApiHealth.latency}ms`}
           icon={Activity}
-          description={`Tasa de Error: ${mockApiHealth.errorRate}%`}
+          description={`Tasa de Error: ${mockApiealth.errorRate}%`}
         />
       </div>
 
@@ -259,15 +282,16 @@ export default function MovementsPage() {
                   <Label htmlFor="webhook-active">Webhook Activo</Label>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Tu endpoint de webhook está listo para recibir facturas.
+                  Tu endpoint de webhook personalizado está listo para recibir facturas.
                 </p>
-                <div className="flex w-full max-w-md items-center space-x-2">
+                <div className="flex w-full max-w-lg items-center space-x-2">
                   <Input type="text" value={webhookUrl} readOnly />
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     onClick={copyToClipboard}
+                    disabled={!webhookUrl.startsWith("http")}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>

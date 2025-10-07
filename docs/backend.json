@@ -53,8 +53,7 @@
       "required": [
         "email",
         "companyName",
-        "role"
-      ]
+        "role"      ]
     },
     "Configuration": {
       "title": "Configuration",
@@ -72,6 +71,10 @@
         "settingValue": {
           "type": "string",
           "description": "The value of the configuration setting."
+        },
+        "webhookIdentifier": {
+            "type": "string",
+            "description": "Unique URL-friendly slug for the company's webhook endpoint."
         }
       },
       "required": [

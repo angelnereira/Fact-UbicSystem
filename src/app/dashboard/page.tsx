@@ -1,3 +1,4 @@
+
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -23,12 +24,10 @@ export default async function DashboardPage() {
   let remainingFolios = 0;
   let foliosError = false;
   try {
-    // This now reads credentials from Firestore dynamically
     remainingFolios = await consultarFolios();
   } catch (error) {
     console.error("Error al consultar folios para el dashboard:", error);
     foliosError = true;
-    // The function will return a mock value or 0 on error, so UI won't break
   }
 
   return (
@@ -61,7 +60,7 @@ export default async function DashboardPage() {
         />
         <StatCard
           title="Folios Restantes"
-          value={remainingFolios.toLocaleString()}
+          value={foliosError ? "N/A" : remainingFolios.toLocaleString()}
           icon={FileStack}
           description="Folios disponibles para timbrar."
         />

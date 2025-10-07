@@ -21,6 +21,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -44,6 +45,7 @@ const settingsSchema = z
     companyName: z.string().min(2, "El nombre de la empresa es requerido."),
     taxId: z.string().min(6, "El ID fiscal es requerido."),
     fiscalAddress: z.string().min(5, "La dirección fiscal es requerida."),
+    webhookIdentifier: z.string().min(3, "El identificador debe tener al menos 3 caracteres.").regex(/^[a-z0-9-]+$/, "Usa solo letras minúsculas, números y guiones."),
     
     demoEnabled: z.boolean(),
     demoTokenEmpresa: z.string(),
@@ -104,6 +106,7 @@ export default function SettingsPage() {
       companyName: "",
       taxId: "",
       fiscalAddress: "",
+      webhookIdentifier: "",
       demoEnabled: true,
       demoTokenEmpresa: "",
       demoTokenPassword: "",
@@ -158,6 +161,10 @@ export default function SettingsPage() {
       
       setIsConnecting(false);
   }
+  
+  const baseWebhookUrl = typeof window !== 'undefined' 
+    ? `${window.location.origin}/api/webhooks/invoices/` 
+    : '/api/webhooks/invoices/';
 
   if(isConfigLoading) {
     return (
@@ -203,7 +210,7 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle>Información de la Empresa</CardTitle>
               <CardDescription>
-                Actualiza los detalles generales y fiscales de tu empresa.
+                Actualiza los detalles generales, fiscales y del webhook de tu empresa.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -244,6 +251,27 @@ export default function SettingsPage() {
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="webhookIdentifier"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Identificador del Webhook</FormLabel>
+                      <div className="flex items-center">
+                        <span className="rounded-l-md border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
+                          {baseWebhookUrl}
+                        </span>
+                        <FormControl>
+                          <Input className="rounded-l-none" placeholder="mi-empresa-unica" {...field} />
+                        </FormControl>
+                      </div>
+                      <FormDescription>
+                        Este es el slug único para tu URL de webhook. Solo letras minúsculas, números y guiones.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
