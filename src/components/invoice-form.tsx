@@ -145,9 +145,12 @@ export function InvoiceForm() {
     }
   }
 
-  const total = form.watch("items").reduce((acc, item) => {
+  const items = form.watch("items");
+  const subtotal = items.reduce((acc, item) => {
     return acc + (item.qty || 0) * (item.unitPrice || 0);
   }, 0);
+  const itbms = subtotal * 0.07;
+  const total = subtotal + itbms;
 
   return (
     <Form {...form}>
@@ -311,14 +314,25 @@ export function InvoiceForm() {
 
         <Separator />
 
-        <div className="flex items-center justify-between">
-          <div className="text-xl font-bold">
-            Total: <span className="font-mono">${total.toFixed(2)}</span>
-          </div>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-             {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Crear Factura
-          </Button>
+        <div className="flex items-start justify-between">
+            <div className="space-y-2">
+                 <p className="flex justify-between text-muted-foreground">
+                    <span>Subtotal:</span>
+                    <span className="font-mono text-right w-24">${subtotal.toFixed(2)}</span>
+                </p>
+                 <p className="flex justify-between text-muted-foreground">
+                    <span>ITBMS (7%):</span>
+                    <span className="font-mono text-right w-24">${itbms.toFixed(2)}</span>
+                </p>
+                 <p className="flex justify-between text-xl font-bold">
+                    <span>Total:</span>
+                    <span className="font-mono text-right w-24">${total.toFixed(2)}</span>
+                </p>
+            </div>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Crear Factura
+            </Button>
         </div>
       </form>
     </Form>
