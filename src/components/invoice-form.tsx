@@ -86,33 +86,52 @@ export function InvoiceForm() {
       const xmlString = e.target?.result as string;
       try {
         const result = convert.xml2js(xmlString, { compact: true, spaces: 2 });
-        const invoiceData = result.factura;
+        const invoiceNode = result.factura;
         
-        form.setValue("externalId", invoiceData.encabezado.idExterno._text);
-        form.setValue("customerName", invoiceData.cliente.nombre._text);
-        form.setValue("customerRuc", invoiceData.cliente.ruc._text);
+        if (!invoiceNode) {
+          throw new Error("El nodo raíz <factura> no fue encontrado en el XML.");
+        }
 
-        remove(); // Limpia los items por defecto
-        const items = Array.isArray(invoiceData.items.item) ? invoiceData.items.item : [invoiceData.items.item];
+        const header = invoiceNode.encabezado;
+        const client = invoiceNode.cliente;
+        const itemsNode = invoiceNode.items;
+
+        if (!header || !client || !itemsNode) {
+          throw new Error("La estructura del XML es inválida. Faltan los nodos <encabezado>, <cliente> o <items>.");
+        }
+
+        form.setValue("externalId", header.idExterno?._text || "");
+        form.setValue("customerName", client.nombre?._text || "");
+        form.setValue("customerRuc", client.ruc?._text || "");
+
+        remove(); // Clear default/existing items
+
+        const items = Array.isArray(itemsNode.item) ? itemsNode.item : [itemsNode.item];
         
+        if (!items || items.length === 0) {
+            throw new Error("No se encontraron ítems en el nodo <items> del XML.");
+        }
+
         items.forEach((item: any) => {
-          append({
-            desc: item.descripcion._text,
-            qty: parseFloat(item.cantidad._text),
-            unitPrice: parseFloat(item.precioUnitario._text),
-          });
+          if (item?.descripcion?._text && item?.cantidad?._text && item?.precioUnitario?._text) {
+            append({
+              desc: item.descripcion._text,
+              qty: parseFloat(item.cantidad._text),
+              unitPrice: parseFloat(item.precioUnitario._text),
+            });
+          }
         });
 
         toast({
-          title: "XML Cargado",
+          title: "XML Cargado Correctamente",
           description: "Los datos del archivo XML han sido cargados en el formulario.",
         });
 
-      } catch (error) {
+      } catch (error: any) {
         toast({
           variant: "destructive",
-          title: "Error al leer XML",
-          description: "El archivo XML no tiene el formato esperado o está corrupto.",
+          title: "Error al Procesar XML",
+          description: error.message || "El archivo no tiene el formato esperado o está corrupto.",
         });
         console.error("XML Parsing Error:", error);
       }
@@ -135,7 +154,7 @@ export function InvoiceForm() {
     
     toast({
       title: "Enviando Factura...",
-      description: "Enviando tu factura al webhook.",
+      description: "Enviando tu factura al webhook para ser procesada y registrada.",
     });
 
     try {
@@ -155,7 +174,7 @@ export function InvoiceForm() {
       
       toast({
         title: "Factura Enviada Exitosamente",
-        description: `Tu factura ha sido recibida y está siendo procesada. (ID: ${data.externalId})`,
+        description: `Tu factura ha sido recibida y se ha creado un registro de envío. (ID: ${data.externalId})`,
       });
 
       form.reset();
