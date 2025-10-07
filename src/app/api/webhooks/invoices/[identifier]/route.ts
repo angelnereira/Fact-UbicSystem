@@ -66,7 +66,7 @@ export async function POST(request: Request, { params }: { params: { identifier:
     const submissionRecord = {
       submissionDate: new Date().toISOString(),
       invoiceData: JSON.stringify(invoicePayload),
-      status: 'pending',
+      status: 'pending', // Estado inicial
       hkaResponseId: null,
     };
     
@@ -94,7 +94,7 @@ export async function POST(request: Request, { params }: { params: { identifier:
 
     return NextResponse.json({
         success: true,
-        uuid: `uuid-${Date.now()}`,
+        uuid: hkaResponse.uuid || `uuid-${Date.now()}`,
         message: "Factura procesada y timbrada exitosamente."
     }, { status: 200 });
 
@@ -118,11 +118,15 @@ export async function POST(request: Request, { params }: { params: { identifier:
     }
 
     if (submissionDocId) {
-        const submissionDocToUpdate = doc(firestore, 'invoiceSubmissions', submissionDocId);
-        await updateDoc(submissionDocToUpdate, {
-            status: errorStatus,
-            hkaResponseId: hkaResponseId,
-        });
+        try {
+            const submissionDocToUpdate = doc(firestore, 'invoiceSubmissions', submissionDocId);
+            await updateDoc(submissionDocToUpdate, {
+                status: errorStatus,
+                hkaResponseId: hkaResponseId,
+            });
+        } catch (updateError) {
+            console.error("Error al actualizar el estado de la sumisión:", updateError);
+        }
     }
 
     if (error.message.includes("No configuration found for webhook identifier")) {

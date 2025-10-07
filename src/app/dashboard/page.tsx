@@ -8,18 +8,55 @@ import {
   PlugZap,
   GitBranch,
 } from "lucide-react";
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import { RecentInvoices } from "@/components/recent-invoices";
+import { RecentInvoices, type RecentInvoice } from "@/components/recent-invoices";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { consultarFolios } from "@/lib/hka/client";
+import { initializeFirebase } from "@/firebase/server";
 
 export const metadata: Metadata = {
   title: "Dashboard | Fact-UbicSystem",
 };
 
-// Make the component async to fetch data on the server
+async function getRecentInvoices(): Promise<RecentInvoice[]> {
+  try {
+    const { firestore } = initializeFirebase();
+    const q = query(collection(firestore, "invoiceSubmissions"), orderBy("submissionDate", "desc"), limit(5));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      return [];
+    }
+
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      let customerName = 'N/A';
+      let customerTaxId = 'N/A';
+      try {
+        const invoiceData = JSON.parse(data.invoiceData);
+        customerName = invoiceData.customerName || 'N/A';
+        customerTaxId = invoiceData.customerRuc || 'N/A';
+      } catch {}
+
+      return {
+        id: doc.id,
+        customerName,
+        customerTaxId,
+        total: 0, // Total no está en la sumisión, se puede calcular después
+        status: data.status,
+        createdAt: new Date(data.submissionDate),
+      };
+    });
+  } catch (error) {
+    console.error("Error fetching recent invoices for dashboard:", error);
+    return []; // Devuelve vacío en caso de error para no romper la página
+  }
+}
+
 export default async function DashboardPage() {
   let remainingFolios = 0;
   let foliosError = false;
@@ -29,6 +66,8 @@ export default async function DashboardPage() {
     console.error("Error al consultar folios para el dashboard:", error);
     foliosError = true;
   }
+  
+  const recentInvoices = await getRecentInvoices();
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
@@ -67,7 +106,7 @@ export default async function DashboardPage() {
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
-          <RecentInvoices />
+          <RecentInvoices initialInvoices={recentInvoices} />
         </Card>
         <Card>
           <CardHeader>
