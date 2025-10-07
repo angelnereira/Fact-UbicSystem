@@ -3,7 +3,8 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
-import { PlusCircle, Trash2, Loader2 } from "lucide-react";
+import { PlusCircle, Trash2, Loader2, Upload } from "lucide-react";
+import convert from "xml-js";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +59,49 @@ export function InvoiceForm() {
     control: form.control,
     name: "items",
   });
+  
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const xmlString = e.target?.result as string;
+      try {
+        const result = convert.xml2js(xmlString, { compact: true, spaces: 2 });
+        const invoiceData = result.factura;
+        
+        form.setValue("externalId", invoiceData.encabezado.idExterno._text);
+        form.setValue("customerName", invoiceData.cliente.nombre._text);
+        form.setValue("customerRuc", invoiceData.cliente.ruc._text);
+
+        remove(); // Limpia los items por defecto
+        const items = Array.isArray(invoiceData.items.item) ? invoiceData.items.item : [invoiceData.items.item];
+        
+        items.forEach((item: any) => {
+          append({
+            desc: item.descripcion._text,
+            qty: parseFloat(item.cantidad._text),
+            unitPrice: parseFloat(item.precioUnitario._text),
+          });
+        });
+
+        toast({
+          title: "XML Cargado",
+          description: "Los datos del archivo XML han sido cargados en el formulario.",
+        });
+
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Error al leer XML",
+          description: "El archivo XML no tiene el formato esperado o está corrupto.",
+        });
+        console.error("XML Parsing Error:", error);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   async function onSubmit(data: InvoiceFormValues) {
     form.control.register('items'); // Ensure array is in form state
@@ -108,6 +152,40 @@ export function InvoiceForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        
+         <div className="flex flex-col md:flex-row gap-4 items-start">
+            <div className="flex-grow space-y-4">
+                <h3 className="text-lg font-medium">Cargar desde Archivo</h3>
+                <div className="flex items-center gap-2">
+                    <FormField
+                    control={form.control}
+                    name="externalId" // Campo dummy, no se usa directamente para el input de archivo
+                    render={({ field }) => (
+                        <FormItem className="w-full">
+                        <FormLabel htmlFor="xml-upload" className="sr-only">Cargar XML</FormLabel>
+                        <FormControl>
+                            <Input id="xml-upload" type="file" accept=".xml,text/xml" onChange={handleFileChange} className="w-full" />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    <Button type="button" variant="outline" className="h-10 w-10 p-0" onClick={() => document.getElementById('xml-upload')?.click()}>
+                        <Upload className="h-5 w-5" />
+                    </Button>
+                </div>
+                <FormMessage />
+            </div>
+            <Separator orientation="vertical" className="mx-4 h-auto hidden md:block" />
+            <Separator className="md:hidden"/>
+            <div className="flex-grow w-full">
+                <h3 className="text-lg font-medium mb-4">O llenar manualmente</h3>
+                {/* Manual fields will go here, but for now we focus on XML */}
+            </div>
+        </div>
+        
+        <Separator />
+
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
            <FormField
             control={form.control}
