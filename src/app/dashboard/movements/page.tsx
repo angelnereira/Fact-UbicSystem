@@ -13,9 +13,13 @@ import {
   Server,
   FileText,
   Loader2,
+  Search,
+  Calendar as CalendarIcon,
 } from "lucide-react";
-import { collection, query, orderBy, limit, doc, getDocs, where } from "firebase/firestore";
-import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking, addDocumentNonBlocking } from "@/firebase";
+import { collection, query, orderBy, limit, where, getDocs, Timestamp } from "firebase/firestore";
+import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { DateRange } from "react-day-picker";
+import { addDays, format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +46,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { StatCard } from "@/components/stat-card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 // Tipado para los datos que vienen de Firestore
 type InvoiceSubmission = {
@@ -50,22 +58,6 @@ type InvoiceSubmission = {
   status: 'pending' | 'certified' | 'failed' | 'error';
   invoiceData: string;
 };
-
-type Configuration = {
-  id: string;
-  webhookIdentifier?: string;
-  // Añadimos otros campos que puedan existir para que el tipo sea más completo
-  companyName?: string;
-  taxId?: string;
-  fiscalAddress?: string;
-  demoEnabled?: boolean;
-  demoTokenEmpresa?: string;
-  demoTokenPassword?: string;
-  prodEnabled?: boolean;
-  prodTokenEmpresa?: string;
-  prodTokenPassword?: string;
-};
-
 
 const statusTranslations: { [key: string]: string } = {
   pending: "Pendiente",
@@ -95,12 +87,16 @@ const mockApiHealth = {
 
 export default function MovementsPage() {
   const { toast } = useToast();
-  const [isAutomationOn, setIsAutomationOn] = useState(true);
   const [webhookIdentifier, setWebhookIdentifier] = useState('');
   const [isSavingIdentifier, setIsSavingIdentifier] = useState(false);
   const [isLoadingIdentifier, setIsLoadingIdentifier] = useState(true);
   const [configId, setConfigId] = useState<string | null>(null);
   
+  // State for filters
+  const [filterText, setFilterText] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterDate, setFilterDate] = useState<DateRange | undefined>();
+
   const firestore = useFirestore();
 
   useEffect(() => {
@@ -138,19 +134,54 @@ export default function MovementsPage() {
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/invoices/${webhookIdentifier}`
     : "Aún no configurado.";
 
-  const submissionsQuery = useMemoFirebase(
-    () =>
-      firestore
-        ? query(
-            collection(firestore, "invoiceSubmissions"),
-            orderBy("submissionDate", "desc"),
-            limit(20)
-          )
-        : null,
-    [firestore]
-  );
+  const submissionsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
   
-  const { data: movements, isLoading } = useCollection<InvoiceSubmission>(submissionsQuery);
+    const filters = [];
+  
+    if (filterStatus !== 'all') {
+      filters.push(where("status", "==", filterStatus));
+    }
+  
+    if (filterDate?.from) {
+      filters.push(where("submissionDate", ">=", Timestamp.fromDate(filterDate.from)));
+    }
+    if (filterDate?.to) {
+      filters.push(where("submissionDate", "<=", Timestamp.fromDate(addDays(filterDate.to, 1))));
+    }
+  
+    // El filtrado de texto completo no es compatible con Firestore sin un servicio de terceros como Algolia.
+    // Lo haremos del lado del cliente por ahora.
+  
+    return query(
+      collection(firestore, "invoiceSubmissions"),
+      ...filters,
+      orderBy("submissionDate", "desc"),
+      limit(50) // Aumentamos el límite para el filtrado del lado del cliente
+    );
+  }, [firestore, filterStatus, filterDate]);
+  
+  const { data: rawMovements, isLoading } = useCollection<InvoiceSubmission>(submissionsQuery);
+
+  const movements = useMemoFirebase(() => {
+    if (!rawMovements) return [];
+    if (!filterText) return rawMovements;
+
+    return rawMovements.filter(mov => {
+        try {
+            const invoice = JSON.parse(mov.invoiceData);
+            const externalId = invoice.externalId || '';
+            const customerName = invoice.customerName || '';
+            const customerRuc = invoice.customerRuc || '';
+            return externalId.toLowerCase().includes(filterText.toLowerCase()) ||
+                   customerName.toLowerCase().includes(filterText.toLowerCase()) ||
+                   customerRuc.toLowerCase().includes(filterText.toLowerCase())
+        } catch {
+            return false;
+        }
+    })
+  }, [rawMovements, filterText])
+
 
   const copyToClipboard = async () => {
     if (!fullWebhookUrl.startsWith("http")) return;
@@ -159,63 +190,14 @@ export default function MovementsPage() {
       await navigator.clipboard.writeText(fullWebhookUrl);
       toast({ title: "¡Copiado!", description: "URL del webhook copiada al portapapeles." });
     } catch (err) {
-      console.error('Failed to copy: ', err);
       toast({
         variant: "destructive",
         title: "Copia Fallida",
         description: "No se pudo copiar la URL. Es posible que tu navegador no lo permita en este contexto.",
       });
+      console.error('Failed to copy: ', err);
     }
   };
-
-  const handleSaveIdentifier = async () => {
-    if (!firestore) return;
-    if (webhookIdentifier && !webhookIdentifier.match(/^[a-z0-9-]+$/)) {
-      toast({
-        variant: "destructive",
-        title: "Identificador no válido",
-        description: "Usa solo letras minúsculas, números y guiones.",
-      });
-      return;
-    }
-    
-    setIsSavingIdentifier(true);
-    try {
-      if (configId) {
-        const configDocRef = doc(firestore, "configurations", configId);
-        await updateDocumentNonBlocking(configDocRef, { webhookIdentifier });
-      } else {
-        const newConfig = {
-          webhookIdentifier,
-          companyName: "Mi Empresa",
-          taxId: "",
-          fiscalAddress: "",
-          demoEnabled: true,
-          demoTokenEmpresa: "",
-          demoTokenPassword: "",
-          prodEnabled: false,
-          prodTokenEmpresa: "",
-          prodTokenPassword: ""
-        };
-        const configurationsCollection = collection(firestore, "configurations");
-        const newDocRef = await addDocumentNonBlocking(configurationsCollection, newConfig);
-        setConfigId(newDocRef.id);
-      }
-      toast({
-        title: "¡Guardado!",
-        description: "El identificador del webhook ha sido actualizado.",
-      });
-    } catch (error: any) {
-       toast({
-        variant: "destructive",
-        title: "Error al Guardar",
-        description: error.message || "No se pudo actualizar el identificador.",
-      });
-    } finally {
-      setIsSavingIdentifier(false);
-    }
-  };
-
 
   const renderTableContent = () => {
     if (isLoading) {
@@ -234,7 +216,7 @@ export default function MovementsPage() {
       return (
         <TableRow>
           <TableCell colSpan={5} className="h-24 text-center">
-            <div>No hay movimientos registrados todavía.</div>
+            <div>No hay movimientos que coincidan con tu búsqueda.</div>
           </TableCell>
         </TableRow>
       );
@@ -318,160 +300,76 @@ export default function MovementsPage() {
         />
       </div>
 
-      <Card>
+       <Card>
         <CardHeader>
-          <CardTitle>Puntos de Entrada de Datos</CardTitle>
-          <CardDescription>
-            Configura cómo se envían las facturas a The Factory HKA.
-          </CardDescription>
+          <CardTitle>Filtrar Movimientos</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="webhook">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="webhook">Webhook</TabsTrigger>
-              <TabsTrigger value="external_api">API Externa</TabsTrigger>
-              <TabsTrigger value="db">DB</TabsTrigger>
-              <TabsTrigger value="folder">Carpeta</TabsTrigger>
-              <TabsTrigger value="ftp">FTP</TabsTrigger>
-            </TabsList>
-            <TabsContent value="webhook" className="mt-4">
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="webhook-active"
-                    checked={true}
-                    disabled
-                    aria-readonly
-                  />
-                  <Label htmlFor="webhook-active">Webhook Activo</Label>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Tu endpoint de webhook personalizado está listo para recibir facturas.
-                </p>
-                <div className="flex w-full max-w-lg items-center space-x-2">
-                   <div className="flex items-center flex-grow">
-                     <span className="rounded-l-md border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
-                       URL del Webhook:
-                     </span>
-                     <Input
-                        type="text"
-                        placeholder="tu-identificador-unico"
-                        className="rounded-l-none"
-                        value={webhookIdentifier}
-                        onChange={(e) => setWebhookIdentifier(e.target.value)}
-                        disabled={isLoadingIdentifier || isSavingIdentifier}
-                      />
-                   </div>
-                  <Button
-                    type="button"
-                    onClick={handleSaveIdentifier}
-                    disabled={isSavingIdentifier || isLoadingIdentifier}
-                  >
-                    {isSavingIdentifier ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                    Guardar
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={copyToClipboard}
-                    disabled={!fullWebhookUrl.startsWith("http")}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-                 <p className="text-xs text-muted-foreground">
-                  La URL completa es:{" "}
-                  <code className="bg-muted p-1 rounded-sm">
-                    {fullWebhookUrl.startsWith('http') ? fullWebhookUrl : 'Guarda un identificador para ver la URL.'}
-                  </code>
-                </p>
-              </div>
-            </TabsContent>
-            <TabsContent value="external_api" className="mt-4">
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-                <Server className="mb-4 h-10 w-10 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">
-                  Configuración de API Externa
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Esta funcionalidad aún no está disponible.
-                </p>
-              </div>
-            </TabsContent>
-            {/* Other tabs are placeholders */}
-            <TabsContent value="db" className="mt-4">
-                 <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-                <Server className="mb-4 h-10 w-10 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">
-                  Configuración de Base de Datos
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Esta funcionalidad aún no está disponible.
-                </p>
-              </div>
-            </TabsContent>
-             <TabsContent value="folder" className="mt-4">
-                 <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-                <Server className="mb-4 h-10 w-10 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">
-                  Configuración de Carpeta
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Esta funcionalidad aún no está disponible.
-                </p>
-              </div>
-            </TabsContent>
-             <TabsContent value="ftp" className="mt-4">
-                 <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-                <Server className="mb-4 h-10 w-10 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">
-                  Configuración de FTP
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Esta funcionalidad aún no está disponible.
-                </p>
-              </div>
-            </TabsContent>
-          </Tabs>
+        <CardContent className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-grow">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por ID externo, cliente o RUC..."
+              className="pl-9"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+            />
+          </div>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-full md:w-[180px]">
+              <SelectValue placeholder="Filtrar por estado" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los estados</SelectItem>
+              <SelectItem value="certified">Certificada</SelectItem>
+              <SelectItem value="pending">Pendiente</SelectItem>
+              <SelectItem value="failed">Fallido</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                id="date"
+                variant={"outline"}
+                className={cn(
+                  "w-full justify-start text-left font-normal md:w-[300px]",
+                  !filterDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {filterDate?.from ? (
+                  filterDate.to ? (
+                    <>
+                      {format(filterDate.from, "LLL dd, y")} -{" "}
+                      {format(filterDate.to, "LLL dd, y")}
+                    </>
+                  ) : (
+                    format(filterDate.from, "LLL dd, y")
+                  )
+                ) : (
+                  <span>Seleccionar fecha</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={filterDate?.from}
+                selected={filterDate}
+                onSelect={setFilterDate}
+                numberOfMonths={2}
+              />
+            </PopoverContent>
+          </Popover>
+          <Button onClick={() => {
+            setFilterText('');
+            setFilterStatus('all');
+            setFilterDate(undefined);
+          }} variant="ghost">Limpiar filtros</Button>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Configuración de Automatización</CardTitle>
-          <CardDescription>
-            Gestiona los parámetros de procesamiento automático de facturas.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="automation-switch" className="text-base">
-                Habilitar Envío Automático
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Procesa automáticamente facturas desde los puntos de entrada configurados.
-              </p>
-            </div>
-            <Switch
-              id="automation-switch"
-              checked={isAutomationOn}
-              onCheckedChange={setIsAutomationOn}
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="frequency">Frecuencia (minutos)</Label>
-              <Input id="frequency" type="number" defaultValue="5" disabled={!isAutomationOn}/>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="retries">Reintentos en caso de fallo</Label>
-              <Input id="retries" type="number" defaultValue="3" disabled={!isAutomationOn}/>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -500,5 +398,3 @@ export default function MovementsPage() {
     </main>
   );
 }
-
-    

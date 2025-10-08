@@ -8,6 +8,7 @@ import {
   FirestoreError,
   QuerySnapshot,
   CollectionReference,
+  Timestamp,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -77,7 +78,21 @@ export function useCollection<T = any>(
         if (snapshot.empty) {
             setData([]); // Set to empty array if no documents found
         } else {
-            const results: ResultItemType[] = snapshot.docs.map(doc => ({ ...(doc.data() as T), id: doc.id }));
+            const results: ResultItemType[] = snapshot.docs.map(doc => {
+              const docData = doc.data();
+              // Convert Firestore Timestamps to ISO strings for serializability
+              const serializedData = Object.keys(docData).reduce((acc, key) => {
+                const value = docData[key];
+                if (value instanceof Timestamp) {
+                  acc[key] = value.toDate().toISOString();
+                } else {
+                  acc[key] = value;
+                }
+                return acc;
+              }, {} as any);
+
+              return { ...serializedData as T, id: doc.id };
+            });
             setData(results);
         }
         setError(null);
