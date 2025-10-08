@@ -1,8 +1,11 @@
 
-import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase-admin/app';
+import { initializeApp, getApp, getApps, FirebaseApp, App, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { firebaseConfig } from './config';
+
+
+let app: App;
 
 // IMPORTANT: DO NOT MODIFY THIS FUNCTION
 export function initializeFirebase() {
@@ -10,13 +13,15 @@ export function initializeFirebase() {
     // When deployed to App Hosting, the service account credentials will be
     // automatically available through environment variables.
     // The initializeApp() function without arguments will use these credentials.
-    initializeApp({
+    app = initializeApp({
       // projectId is needed for local development when GOOGLE_APPLICATION_CREDENTIALS
       // is not set.
       projectId: firebaseConfig.projectId,
     });
+  } else {
+    app = getApp();
   }
-  return getSdks(getApp());
+  return getSdks(app);
 }
 
 export function getSdks(app: FirebaseApp) {
