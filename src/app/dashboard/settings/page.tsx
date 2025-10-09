@@ -143,8 +143,6 @@ export default function SettingsPage() {
   }
 
   async function handleValidateCredentials(environment: 'demo' | 'prod') {
-      if (!selectedConfigId) return;
-      
       const values = form.getValues();
       const credentials = {
         usuario: environment === 'demo' ? values.demoUser : values.prodUser,
@@ -170,7 +168,7 @@ export default function SettingsPage() {
 
         toast({
             title: "Conexión Exitosa",
-            description: `Credenciales para el ambiente ${environment} son válidas.`,
+            description: `Credenciales para el ambiente ${environment.toUpperCase()} son válidas.`,
             action: <div className="p-2 rounded-full bg-green-100"><CheckCircle className="text-green-600" /></div>,
         });
 
