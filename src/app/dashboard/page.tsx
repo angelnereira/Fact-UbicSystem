@@ -58,6 +58,9 @@ async function getRecentInvoices(): Promise<RecentInvoice[]> {
 }
 
 export default async function DashboardPage() {
+  // Explicitly initialize firebase here to ensure env vars are loaded.
+  initializeFirebase();
+
   let remainingFolios = 0;
   let foliosError = false;
   try {

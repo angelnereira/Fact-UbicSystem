@@ -4,14 +4,14 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { firebaseConfig } from './config';
 
+let app: App;
+
 /**
  * Initializes and/or retrieves the server-side Firebase app and its services.
- * This function is now idempotent and ensures that the app is only initialized once.
- * It will always return the necessary SDKs.
+ * This function is now idempotent and ensures that the app is only initialized once,
+ * guaranteeing that environment variables are loaded.
  */
 export function initializeFirebase() {
-  let app: App;
-
   if (!getApps().length) {
     // When deployed to App Hosting, the service account credentials will be
     // automatically available through environment variables.
@@ -25,8 +25,7 @@ export function initializeFirebase() {
     app = getApp();
   }
 
-  // CRITICAL FIX: Always return the SDKs, regardless of whether the app was
-  // just initialized or already existed.
+  // CRITICAL FIX: Always return the SDKs after ensuring initialization.
   return {
     firebaseApp: app,
     auth: getAuth(app),
