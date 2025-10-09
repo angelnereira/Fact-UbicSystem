@@ -12,6 +12,8 @@ interface ApiConfig {
   wsdlUrl: string;
   usuario: string;
   clave: string;
+  emisorRuc: string;
+  emisorDv: string;
 }
 
 // --- Session Token Management ---
@@ -19,8 +21,9 @@ let sessionToken: { token: string; expires: number } | null = null;
 
 /**
  * Gets the active HKA API configuration from environment variables.
+ * This is the single source of truth for all credentials.
  */
-async function getActiveHkaConfig(): Promise<ApiConfig> {
+function getActiveHkaConfig(): ApiConfig {
   const env = process.env.NEXT_PUBLIC_HKA_ENV as HkaEnv;
 
   if (env !== 'demo' && env !== 'prod') {
@@ -30,30 +33,41 @@ async function getActiveHkaConfig(): Promise<ApiConfig> {
     });
   }
 
-  const config: Omit<ApiConfig, 'wsdlUrl'> = {
-    env,
+  const config: Omit<ApiConfig, 'wsdlUrl' | 'env'> = {
     usuario: '',
     clave: '',
+    emisorRuc: '',
+    emisorDv: '',
+  };
+  
+  const varMap: { [key: string]: 'usuario' | 'clave' | 'emisorRuc' | 'emisorDv' } = {
+      [env === 'demo' ? 'HKA_USER_DEMO' : 'HKA_USER_PROD']: 'usuario',
+      [env === 'demo' ? 'HKA_PASS_DEMO' : 'HKA_PASS_PROD']: 'clave',
+      [env === 'demo' ? 'HKA_RUC_DEMO' : 'HKA_RUC_PROD']: 'emisorRuc',
+      [env === 'demo' ? 'HKA_DV_DEMO' : 'HKA_DV_PROD']: 'emisorDv',
   };
 
-  if (env === 'demo') {
-    config.usuario = process.env.HKA_USER_DEMO || '';
-    config.clave = process.env.HKA_PASS_DEMO || '';
-  } else { // prod
-    config.usuario = process.env.HKA_USER_PROD || '';
-    config.clave = process.env.HKA_PASS_PROD || '';
+  const missingVars: string[] = [];
+  
+  for (const envVar in varMap) {
+      const value = process.env[envVar];
+      if (value) {
+          config[varMap[envVar]] = value;
+      } else {
+          missingVars.push(envVar);
+      }
   }
 
-  const missingVars = Object.entries(config).filter(([, value]) => !value).map(([key]) => key.toUpperCase());
   if (missingVars.length > 0) {
       throw new HkaError({
-          message: `Configuration error: Missing environment variables for '${env}' in apphosting.yaml: HKA_${missingVars.join('_DEMO/PROD, HKA_')}_DEMO/PROD.`,
+          message: `Configuration error in apphosting.yaml: The following secrets are missing for the '${env}' environment: ${missingVars.join(', ')}.`,
           status: 500,
       });
   }
 
   return {
     ...config,
+    env,
     wsdlUrl: env === 'demo'
       ? 'https://demoemision.thefactoryhka.com.pa/ws/obj/v1.0/Service.svc?wsdl'
       : 'https://emision.thefactoryhka.com.pa/ws/obj/v1.0/Service.svc?wsdl'
@@ -65,7 +79,7 @@ async function getActiveHkaConfig(): Promise<ApiConfig> {
  * Creates a SOAP client, authenticates if necessary, and returns the client and token.
  */
 async function getAuthenticatedSoapClient() {
-  const config = await getActiveHkaConfig();
+  const config = getActiveHkaConfig();
   const client = await createClientAsync(config.wsdlUrl);
 
   const now = Date.now();
@@ -80,7 +94,7 @@ async function getAuthenticatedSoapClient() {
 
       const authResult = response[0]?.AutenticarResult;
       if (!authResult?.Token) {
-        throw new HkaError({ message: 'Authentication failed: No token received.' });
+        throw new HkaError({ message: 'Authentication failed: No token received from HKA.' });
       }
 
       sessionToken = {
@@ -105,10 +119,17 @@ async function getAuthenticatedSoapClient() {
 
 /**
  * Stamps an invoice (timbrar).
- * The emisorConfig is now fetched from getActiveHkaConfig.
+ * The emisorConfig is now fetched internally from environment variables.
  */
-export async function timbrar(payload: object, emisorConfig: { ruc: string; dv: string; name: string }): Promise<any> {
-    const { client, token } = await getAuthenticatedSoapClient();
+export async function timbrar(payload: object): Promise<any> {
+    const { client, token, config } = await getAuthenticatedSoapClient();
+    
+    const emisorConfig = {
+      ruc: config.emisorRuc,
+      dv: config.emisorDv,
+      name: "Placeholder Company Name" // This can be enhanced later if needed
+    };
+
     const xmlBody = convertInvoiceToXml(payload, emisorConfig);
     const documentoBase64 = Buffer.from(xmlBody).toString('base64');
     
@@ -165,9 +186,8 @@ export async function consultarEstado(cufe: string): Promise<HkaStatus> {
 
         const result = JSON.parse(resultStr);
         
-        // This is a simulation, as the real response structure is not fully detailed.
         return {
-            status: result.Estado === "ACEPTADO" ? "stamped" : "processing",
+            status: result.Estado === "ACEPTADO" ? "stamped" : (result.Estado === "ANULADO" ? "cancelled" : "processing"),
             message: `El documento con CUFE ${cufe} se encuentra en estado: ${result.Estado}`,
             uuid: cufe,
             folio: cufe,
@@ -222,10 +242,30 @@ export async function anular(cufe: string, reason: string): Promise<HkaResponse>
 }
 
 /**
- * Consults the number of remaining folios (simulated).
+ * Consults the number of remaining folios. This is a real call now.
  */
 export async function consultarFolios(): Promise<number> {
-  // The SOAP API documentation does not specify a method for this.
-  // This is a simulated response. In a real scenario, this might not be possible.
-  return Math.floor(Math.random() * 1000) + 500;
+    const { client, token } = await getAuthenticatedSoapClient();
+    try {
+        const method: ISoapMethod = client['ConsultarCreditosDisponiblesAsync'];
+        const response = await method({ token });
+        const result = response[0]?.ConsultarCreditosDisponiblesResult;
+        
+        if (typeof result?.CreditosDisponibles !== 'number') {
+            throw new HkaError({ 
+                message: 'Invalid response structure for credit query.', 
+                body: result 
+            });
+        }
+
+        return result.CreditosDisponibles;
+    } catch (error: any) {
+        if (error instanceof HkaError) {
+            console.error("Failed to fetch folios due to HKA client error:", error.message);
+            throw error;
+        }
+        console.error("Failed to fetch folios.", error);
+        // Return a value indicating an error to the UI
+        return -1;
+    }
 }

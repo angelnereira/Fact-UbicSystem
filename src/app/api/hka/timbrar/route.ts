@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { timbrar } from '@/lib/hka/actions';
 import { HkaError } from '@/lib/hka/types';
 import { initializeFirebase } from '@/firebase/server';
-import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
 
 /**
  * @swagger
@@ -11,8 +11,9 @@ import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
  *   post:
  *     summary: Timbra una factura manualmente desde la UI.
  *     description: |
- *       Recibe los datos de una factura desde el formulario, obtiene la configuración
- *       del emisor desde Firestore, crea un registro de sumisión y la envía a timbrar a HKA.
+ *       Recibe los datos de una factura desde el formulario, crea un registro de sumisión
+ *       y la envía a timbrar a HKA. Las credenciales del emisor se obtienen
+ *       automáticamente desde la configuración del entorno del servidor.
  *     requestBody:
  *       required: true
  *       content:
@@ -47,24 +48,6 @@ export async function POST(request: Request) {
       );
     }
     
-    // Obtener la configuración del emisor desde Firestore
-    const configRef = doc(firestore, 'configurations', 'global-settings');
-    const configSnap = await getDoc(configRef);
-
-    if (!configSnap.exists()) {
-        return NextResponse.json({ message: 'Configuración de emisor no encontrada. Por favor, guarde la configuración de la empresa en la página de Configuración.' }, { status: 400 });
-    }
-    const configData = configSnap.data();
-    const emisorConfig = {
-        ruc: configData.companyRuc,
-        dv: configData.companyDv,
-        name: configData.companyName
-    };
-    
-    if (!emisorConfig.ruc || !emisorConfig.dv || !emisorConfig.name) {
-        return NextResponse.json({ message: 'El RUC, DV y nombre del emisor no están configurados completamente. Por favor, guarde la configuración de la empresa.' }, { status: 400 });
-    }
-    
     const submissionRecord = {
       submissionDate: new Date().toISOString(),
       invoiceData: JSON.stringify(invoicePayload),
@@ -76,8 +59,8 @@ export async function POST(request: Request) {
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
     submissionDocId = submissionDocRef.id;
 
-    // Llamar a timbrar, ahora con la configuración del emisor obtenida
-    const hkaResponse = await timbrar(invoicePayload, emisorConfig);
+    // Llamar a timbrar. La configuración del emisor se maneja dentro de la acción.
+    const hkaResponse = await timbrar(invoicePayload);
     
     const hkaResponsesRef = collection(firestore, 'hkaResponses');
     const hkaResponseRecord = {
