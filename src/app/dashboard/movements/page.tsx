@@ -1,23 +1,20 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Activity,
   AlertTriangle,
   CheckCircle,
-  Copy,
   Info,
   RefreshCw,
-  Server,
   FileText,
   Loader2,
   Search,
   Calendar as CalendarIcon,
 } from "lucide-react";
-import { collection, query, orderBy, limit, where, getDocs, Timestamp } from "firebase/firestore";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { DateRange } from "react-day-picker";
+import { collection, query, orderBy, limit, where, Timestamp, onSnapshot } from "firebase/firestore";
+import { useFirestore, useMemoFirebase } from "@/firebase";
+import type { DateRange } from "react-day-picker";
 import { addDays, format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
@@ -29,7 +26,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/page-header";
 import {
   Table,
@@ -39,16 +35,46 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Switch } from "@/components/ui/switch";
 import { StatCard } from "@/components/stat-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+
+// A custom hook to fetch and subscribe to a collection
+function useCollection<T>(q: any) {
+  const [data, setData] = useState<T[] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!q) {
+      setData(null);
+      setIsLoading(false);
+      return;
+    }
+    const unsub = onSnapshot(
+      q,
+      (snap: any) => {
+        const data = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
+        setData(data);
+        setIsLoading(false);
+        setError(null);
+      },
+      (err: any) => {
+        setError(err);
+        setIsLoading(false);
+      }
+    );
+    return () => unsub();
+  }, [q]);
+
+  return { data, isLoading, error };
+}
+
 
 // Tipado para los datos que vienen de Firestore
 type InvoiceSubmission = {
@@ -83,6 +109,7 @@ const mockApiHealth = {
   latency: 0,
   errorRate: 0,
 };
+
 
 export default function MovementsPage() {
   const { toast } = useToast();
@@ -125,7 +152,7 @@ export default function MovementsPage() {
   
   const { data: rawMovements, isLoading } = useCollection<InvoiceSubmission>(submissionsQuery);
 
-  const movements = useMemoFirebase(() => {
+  const movements = useMemo(() => {
     if (!rawMovements) return [];
     if (!filterText) return rawMovements;
 
@@ -348,5 +375,3 @@ export default function MovementsPage() {
     </main>
   );
 }
-
-    

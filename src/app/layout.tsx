@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
-import { FirebaseClientProvider, FirebaseErrorListener } from "@/firebase";
+import { FirebaseProvider } from "@/firebase/provider";
 
 export const metadata: Metadata = {
   title: "Fact-UbicSystem",
@@ -25,16 +25,13 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body antialiased">
-        <FirebaseClientProvider>
+        <FirebaseProvider>
           <AppShell>
-            <FirebaseErrorListener />
             {children}
           </AppShell>
-        </FirebaseClientProvider>
+        </FirebaseProvider>
         <Toaster />
       </body>
     </html>
   );
 }
-
-    
