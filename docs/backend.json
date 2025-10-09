@@ -73,21 +73,21 @@
             "type": "string",
             "description": "Unique URL-friendly slug for the company's webhook endpoint."
         },
-        "demoApiKey": {
+        "demoUser": {
           "type": "string",
-          "description": "API Key for The Factory HKA's demo environment."
+          "description": "User for The Factory HKA's demo environment."
         },
-        "demoApiSecret": {
+        "demoPassword": {
           "type": "string",
-          "description": "API Secret for The Factory HKA's demo environment."
+          "description": "Password for The Factory HKA's demo environment."
         },
-        "prodApiKey": {
+        "prodUser": {
           "type": "string",
-          "description": "API Key for The Factory HKA's production environment."
+          "description": "User for The Factory HKA's production environment."
         },
-        "prodApiSecret": {
+        "prodPassword": {
           "type": "string",
-          "description": "API Secret for The Factory HKA's production environment."
+          "description": "Password for The Factory HKA's production environment."
         }
       },
       "required": [

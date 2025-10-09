@@ -7,29 +7,33 @@ import { doc, getDoc } from 'firebase/firestore';
 
 type HkaEnv = 'demo' | 'prod';
 
-interface ApiConfig {
-  env: HkaEnv;
-  baseUrl: string;
-  apiKey: string;
-  apiSecret: string;
-}
-
 interface ClientConfiguration {
     companyName: string;
     companyRuc: string;
     webhookIdentifier: string;
-    demoApiKey?: string;
-    demoApiSecret?: string;
-    prodApiKey?: string;
-    prodApiSecret?: string;
+    demoUser?: string;
+    demoPassword?: string;
+
+    prodUser?: string;
+    prodPassword?: string;
 }
 
+interface AuthCredentials {
+    user: string;
+    pass: string;
+}
+
+let tokenCache = {
+    demo: { token: '', expires: 0 },
+    prod: { token: '', expires: 0 },
+};
+
 /**
- * Gets the active HKA API configuration from a Firestore document.
+ * Gets the HKA API credentials from a Firestore document.
  * @param configId The ID of the configuration document in Firestore.
  * @param env The environment ('demo' or 'prod') to get credentials for.
  */
-async function getHkaConfig(configId: string, env: HkaEnv): Promise<ApiConfig> {
+async function getHkaCredentials(configId: string, env: HkaEnv): Promise<AuthCredentials> {
     if (!configId) {
         throw new HkaError({ message: "No configuration ID provided.", status: 400 });
     }
@@ -45,24 +49,60 @@ async function getHkaConfig(configId: string, env: HkaEnv): Promise<ApiConfig> {
     const configData = configSnap.data() as ClientConfiguration;
 
     const credentials = {
-        apiKey: env === 'demo' ? configData.demoApiKey : configData.prodApiKey,
-        apiSecret: env === 'demo' ? configData.demoApiSecret : configData.prodApiSecret,
+        user: env === 'demo' ? configData.demoUser : configData.prodUser,
+        pass: env === 'demo' ? configData.demoPassword : configData.prodPassword,
     };
 
-    if (!credentials.apiKey || !credentials.apiSecret) {
+    if (!credentials.user || !credentials.pass) {
         throw new HkaError({
-            message: `Configuration '${configData.companyName}' is incomplete for the '${env}' environment. Missing API Key or Secret.`,
+            message: `Configuration for '${configData.companyName}' is incomplete for the '${env}' environment. Missing User or Password.`,
             status: 400,
         });
     }
 
-    return {
-        ...credentials,
-        env,
-        baseUrl: env === 'demo'
-            ? 'https://demointegracion.thefactoryhka.com.pa'
-            : 'https://integracion.thefactoryhka.com.pa',
-    } as ApiConfig;
+    return credentials;
+}
+
+
+/**
+ * Gets a valid JWT token from HKA, using a cached one if available.
+ * @param configId The ID of the client configuration.
+ * @param env The environment ('demo' or 'prod').
+ */
+async function getAuthToken(configId: string, env: HkaEnv): Promise<string> {
+    const now = Date.now();
+    if (tokenCache[env] && tokenCache[env].expires > now) {
+        return tokenCache[env].token;
+    }
+
+    const credentials = await getHkaCredentials(configId, env);
+    const baseUrl = env === 'demo'
+        ? 'https://demointegracion.thefactoryhka.com.pa'
+        : 'https://integracion.thefactoryhka.com.pa';
+
+    const response = await fetch(`${baseUrl}/api/Autenticacion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario: credentials.user, clave: credentials.pass }),
+    });
+
+    const body = await response.json();
+
+    if (!response.ok) {
+        throw new HkaError({
+            message: body.message || 'Authentication failed with HKA.',
+            status: response.status,
+            body,
+        });
+    }
+    
+    // Cache the token - assuming it expires in 1 hour (3600 seconds)
+    tokenCache[env] = {
+        token: body.token,
+        expires: now + 3600 * 1000 - 60000, // Refresh 1 minute before expiry
+    };
+
+    return body.token;
 }
 
 /**
@@ -73,14 +113,16 @@ async function getHkaConfig(configId: string, env: HkaEnv): Promise<ApiConfig> {
  * @param options The options for the fetch request.
  */
 async function hkaApiRequest(configId: string, env: HkaEnv, endpoint: string, options: RequestInit): Promise<any> {
-    const config = await getHkaConfig(configId, env);
+    const token = await getAuthToken(configId, env);
+    const baseUrl = env === 'demo'
+        ? 'https://demointegracion.thefactoryhka.com.pa'
+        : 'https://integracion.thefactoryhka.com.pa';
 
-    const url = `${config.baseUrl}${endpoint}`;
+    const url = `${baseUrl}${endpoint}`;
 
     const headers = new Headers(options.headers || {});
     headers.set('Content-Type', 'application/json');
-    headers.set('Authorization', `Bearer ${config.apiKey}`); // Assuming Bearer token auth
-    headers.set('x-api-secret', config.apiSecret); // Or a custom header for the secret
+    headers.set('Authorization', `Bearer ${token}`);
 
     try {
         const response = await fetch(url, { ...options, headers });
@@ -111,6 +153,33 @@ async function hkaApiRequest(configId: string, env: HkaEnv, endpoint: string, op
 // --- Exported API Functions ---
 
 /**
+ * Validates HKA credentials by attempting to authenticate.
+ */
+export async function validateCredentials(env: HkaEnv, usuario: string, clave: string): Promise<{success: boolean; message: string;}> {
+     const baseUrl = env === 'demo'
+        ? 'https://demointegracion.thefactoryhka.com.pa'
+        : 'https://integracion.thefactoryhka.com.pa';
+
+    const response = await fetch(`${baseUrl}/api/Autenticacion`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario, clave }),
+    });
+    
+    const body = await response.json();
+
+    if (!response.ok) {
+         throw new HkaError({
+            message: body.message || 'Authentication failed.',
+            status: response.status,
+            body,
+        });
+    }
+    
+    return { success: true, message: "Authentication successful." };
+}
+
+/**
  * Stamps an invoice (timbrar) by sending it to the HKA REST API.
  * @param payload The invoice data object.
  * @param configId The ID of the client configuration to use.
@@ -125,7 +194,6 @@ export async function timbrar(payload: object, configId: string, env: HkaEnv): P
 
     const result = await hkaApiRequest(configId, env, endpoint, options);
 
-    // Assuming the response for a successful submission has a CUFE/UUID
     if (!result.cufe && !result.uuid) {
          throw new HkaError({ message: 'HKA response did not contain a CUFE/UUID.', body: result });
     }
@@ -150,7 +218,6 @@ export async function consultarEstado(cufe: string, configId: string, env: HkaEn
     
     const result = await hkaApiRequest(configId, env, endpoint, options);
     
-    // Map HKA status to our internal status
     let internalStatus: HkaStatus['status'] = 'processing';
     if (result.estado === 'ACEPTADO') internalStatus = 'stamped';
     if (result.estado === 'ANULADO') internalStatus = 'cancelled';

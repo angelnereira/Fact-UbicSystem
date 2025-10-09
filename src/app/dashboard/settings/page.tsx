@@ -1,8 +1,7 @@
-
 "use client";
 
 import * as React from "react";
-import { Loader2, PlusCircle, Trash2 } from "lucide-react";
+import { Loader2, PlusCircle, Trash2, CheckCircle, AlertCircle } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,10 +23,10 @@ const configSchema = z.object({
   companyName: z.string().min(1, "El nombre de la empresa es requerido."),
   companyRuc: z.string().min(1, "El RUC de la empresa es requerido."),
   webhookIdentifier: z.string().min(3, "El identificador debe tener al menos 3 caracteres.").regex(/^[a-z0-9-]+$/, "Solo minúsculas, números y guiones."),
-  demoApiKey: z.string().optional(),
-  demoApiSecret: z.string().optional(),
-  prodApiKey: z.string().optional(),
-  prodApiSecret: z.string().optional(),
+  demoUser: z.string().optional(),
+  demoPassword: z.string().optional(),
+  prodUser: z.string().optional(),
+  prodPassword: z.string().optional(),
 });
 
 type ConfigFormValues = z.infer<typeof configSchema>;
@@ -63,6 +62,7 @@ export default function SettingsPage() {
   const { configs, loading: loadingConfigs } = useConfigurations();
   const [selectedConfigId, setSelectedConfigId] = React.useState<string | undefined>();
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [isValidating, setIsValidating] = React.useState(false);
 
   const form = useForm<ConfigFormValues>({
     resolver: zodResolver(configSchema),
@@ -82,11 +82,8 @@ export default function SettingsPage() {
       form.reset(selectedConfig);
     } else {
       form.reset({
-        companyName: "",
-        companyRuc: "",
-        webhookIdentifier: "",
-        demoApiKey: "", demoApiSecret: "",
-        prodApiKey: "", prodApiSecret: "",
+        companyName: "", companyRuc: "", webhookIdentifier: "",
+        demoUser: "", demoPassword: "", prodUser: "", prodPassword: "",
       });
     }
   }, [selectedConfig, form]);
@@ -145,6 +142,51 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleValidateCredentials(environment: 'demo' | 'prod') {
+      if (!selectedConfigId) return;
+      
+      const values = form.getValues();
+      const credentials = {
+        usuario: environment === 'demo' ? values.demoUser : values.prodUser,
+        clave: environment === 'demo' ? values.demoPassword : values.prodPassword,
+      };
+
+      if (!credentials.usuario || !credentials.clave) {
+        toast({ variant: 'destructive', title: 'Faltan Credenciales', description: 'Por favor, ingresa el usuario y la clave.'});
+        return;
+      }
+      
+      setIsValidating(true);
+      try {
+        const response = await fetch('/api/hka/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ environment, ...credentials }),
+        });
+        
+        const result = await response.json();
+
+        if (!response.ok) throw new Error(result.message || 'Error desconocido');
+
+        toast({
+            title: "Conexión Exitosa",
+            description: `Credenciales para el ambiente ${environment} son válidas.`,
+            action: <div className="p-2 rounded-full bg-green-100"><CheckCircle className="text-green-600" /></div>,
+        });
+
+      } catch (error: any) {
+        toast({
+            variant: "destructive",
+            title: "Fallo en la Validación",
+            description: error.message,
+            action: <div className="p-2 rounded-full bg-red-100"><AlertCircle className="text-red-600" /></div>,
+        });
+      } finally {
+        setIsValidating(false);
+      }
+  }
+
+
   const handleCreateNew = () => {
     setSelectedConfigId(undefined);
     form.reset({ companyName: "", companyRuc: "", webhookIdentifier: "" });
@@ -166,7 +208,7 @@ export default function SettingsPage() {
               <div className="space-y-1.5">
                   <CardTitle>Seleccionar Cliente</CardTitle>
                   <CardDescription>
-                      Elige una configuración de cliente para ver o editar, o crea una nueva.
+                      Elige una configuración de cliente para ver, editar, o crea una nueva.
                   </CardDescription>
               </div>
               <Button variant="outline" onClick={handleCreateNew}><PlusCircle className="mr-2"/> Crear Nuevo Cliente</Button>
@@ -240,11 +282,17 @@ export default function SettingsPage() {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Credenciales de Ambiente Demo</CardTitle>
-                                <CardDescription>Credenciales API REST para el entorno de pruebas.</CardDescription>
+                                <CardDescription>Credenciales para el entorno de pruebas.</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField control={form.control} name="demoApiKey" render={({ field }) => (<FormItem><FormLabel>API Key (Demo)</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                <FormField control={form.control} name="demoApiSecret" render={({ field }) => (<FormItem><FormLabel>API Secret (Demo)</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField control={form.control} name="demoUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Demo)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="demoPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Demo)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                </div>
+                                <Button type="button" variant="outline" onClick={() => handleValidateCredentials('demo')} disabled={isValidating}>
+                                    {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Validar Credenciales Demo
+                                </Button>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -253,11 +301,17 @@ export default function SettingsPage() {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Credenciales de Ambiente de Producción</CardTitle>
-                                <CardDescription>Credenciales API REST para el entorno productivo. ¡Manejar con cuidado!</CardDescription>
+                                <CardDescription>Credenciales para el entorno productivo. ¡Manejar con cuidado!</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField control={form.control} name="prodApiKey" render={({ field }) => (<FormItem><FormLabel>API Key (Producción)</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                <FormField control={form.control} name="prodApiSecret" render={({ field }) => (<FormItem><FormLabel>API Secret (Producción)</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                             <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField control={form.control} name="prodUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Producción)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={form.control} name="prodPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Producción)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                </div>
+                                <Button type="button" variant="outline" onClick={() => handleValidateCredentials('prod')} disabled={isValidating}>
+                                    {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Validar Credenciales de Producción
+                                </Button>
                             </CardContent>
                         </Card>
                     </TabsContent>
