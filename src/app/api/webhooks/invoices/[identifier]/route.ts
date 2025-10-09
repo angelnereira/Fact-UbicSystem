@@ -1,7 +1,8 @@
 
 
 import { NextResponse } from 'next/server';
-import { timbrar, HkaError } from '@/lib/hka/client';
+import { timbrar } from '@/lib/hka/actions';
+import { HkaError } from '@/lib/hka/types';
 import { initializeFirebase } from '@/firebase/server';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 
@@ -63,7 +64,6 @@ export async function POST(request: Request, { params }: { params: { identifier:
       );
     }
     
-    // 1. Crear el registro de sumisión inicial
     const submissionRecord = {
       submissionDate: new Date().toISOString(),
       invoiceData: JSON.stringify(invoicePayload),
@@ -75,10 +75,8 @@ export async function POST(request: Request, { params }: { params: { identifier:
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
     submissionDocId = submissionDocRef.id;
 
-    // 2. Intentar timbrar la factura (ahora usa credenciales del entorno)
     const hkaResponse = await timbrar(invoicePayload);
     
-    // 3. Guardar la respuesta de HKA
     const hkaResponseRecord = {
       responseDate: new Date().toISOString(),
       statusCode: 200, // Assumed success
@@ -87,7 +85,6 @@ export async function POST(request: Request, { params }: { params: { identifier:
     };
     const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
 
-    // 4. Actualizar la sumisión original con el estado 'certified' y el ID de la respuesta
     const submissionDocToUpdate = doc(firestore, 'invoiceSubmissions', submissionDocId);
     await updateDoc(submissionDocToUpdate, {
       status: 'certified',

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { timbrar, HkaError } from '@/lib/hka/client';
+import { timbrar } from '@/lib/hka/actions';
+import { HkaError } from '@/lib/hka/types';
 import { initializeFirebase } from '@/firebase/server';
 import { collection, addDoc } from 'firebase/firestore';
 
@@ -46,8 +47,6 @@ export async function POST(request: Request) {
       );
     }
     
-    // 1. Crear el registro de sumisión en Firestore.
-    // Esto es análogo a la primera parte del webhook.
     const submissionRecord = {
       submissionDate: new Date().toISOString(),
       invoiceData: JSON.stringify(invoicePayload),
@@ -58,12 +57,8 @@ export async function POST(request: Request) {
     
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
 
-    // 2. Timbrar la factura. No se pasa un `identifier` para que tome la config por defecto.
     const hkaResponse = await timbrar(invoicePayload);
     
-    // 3. (Opcional) Guardar la respuesta de HKA y actualizar la sumisión.
-    // Esta lógica se podría mover a un Cloud Function que escuche cambios en 'invoiceSubmissions'
-    // para no bloquear la respuesta al cliente. Por ahora, lo hacemos aquí.
     const hkaResponsesRef = collection(firestore, 'hkaResponses');
     const hkaResponseRecord = {
       responseDate: new Date().toISOString(),

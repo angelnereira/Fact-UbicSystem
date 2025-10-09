@@ -15,8 +15,8 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { RecentInvoices, type RecentInvoice } from "@/components/recent-invoices";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { consultarFolios } from "@/lib/hka/client";
 import { initializeFirebase } from "@/firebase/server";
+import { HkaError } from "@/lib/hka/types";
 
 export const metadata: Metadata = {
   title: "Dashboard | Fact-UbicSystem",
@@ -57,19 +57,11 @@ async function getRecentInvoices(): Promise<RecentInvoice[]> {
   }
 }
 
-async function getDashboardData() {
-  try {
-    const remainingFolios = await consultarFolios();
-    return { remainingFolios, foliosError: false };
-  } catch (error) {
-    console.error("Error al consultar folios para el dashboard:", error);
-    return { remainingFolios: 0, foliosError: true };
-  }
-}
-
 export default async function DashboardPage() {
-  const { remainingFolios, foliosError } = await getDashboardData();
+  
   const recentInvoices = await getRecentInvoices();
+  const foliosError = false; // Assume no error for initial render.
+  const remainingFolios = "Cargando..."; // This will be loaded on the client.
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
@@ -101,7 +93,7 @@ export default async function DashboardPage() {
         />
         <StatCard
           title="Folios Restantes"
-          value={foliosError ? "N/A" : remainingFolios.toLocaleString()}
+          value={remainingFolios.toLocaleString()}
           icon={FileStack}
           description="Folios disponibles para timbrar."
         />

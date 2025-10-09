@@ -1,35 +1,20 @@
 
+'use server';
+
 /**
  * @fileoverview
- * This module provides a client for interacting with The Factory HKA API.
+ * This module provides Server Actions for interacting with The Factory HKA API.
  * It reads credentials from environment variables, handles request retries,
  * and provides typed functions for API operations.
+ * This file is marked as 'use server' to ensure it only runs on the server.
  */
+
+import { convertInvoiceToXml } from "./utils";
+import { HkaError, type HkaResponse, type HkaStatus } from "./types";
 
 // --- Types and Error Classes ---
 
 type HkaEnv = "prod" | "demo";
-
-interface HkaErrorData {
-  message: string;
-  status?: number;
-  body?: any;
-  attempts?: number;
-}
-
-export class HkaError extends Error {
-  status?: number;
-  body?: any;
-  attempts?: number;
-
-  constructor({ message, status, body, attempts }: HkaErrorData) {
-    super(message);
-    this.name = "HkaError";
-    this.status = status;
-    this.body = body;
-    this.attempts = attempts;
-  }
-}
 
 interface ApiConfig {
   apiKey: string;
@@ -94,7 +79,6 @@ async function request(
   opts: RequestInit = {},
   retries: number = 0
 ): Promise<any> {
-  // Config is now fetched from environment variables inside this function.
   const { apiKey, baseUrl } = await getActiveHkaConfig();
   
   const url = `${baseUrl}${path}`;
@@ -160,34 +144,13 @@ async function request(
   }
 }
 
-// --- Placeholder Conversion Functions ---
-
-function convertInvoiceToXml(jsonData: object): string {
-  console.log("Simulating conversion of JSON to XML for:", jsonData);
-  return `<factura><cliente>${(jsonData as any).customerName}</cliente><id>${(jsonData as any).externalId}</id></factura>`;
-}
-
 // --- Exported API Functions ---
 
-export interface HkaResponse {
-  success: boolean;
-  uuid?: string;
-  message?: string;
-  data?: any;
-}
-
-export interface HkaStatus {
-  status: "stamped" | "cancelled" | "processing" | "error" | "not_found";
-  uuid?: string;
-  folio?: string;
-  message: string;
-}
 
 /**
  * Stamps an invoice (timbrar).
- * The 'identifier' parameter is no longer used as config is derived from environment variables.
  */
-export function timbrar(payload: object): Promise<HkaResponse> {
+export async function timbrar(payload: object): Promise<HkaResponse> {
   const xmlBody = convertInvoiceToXml(payload);
   return request("/invoices/timbrar", {
     method: "POST",
@@ -199,14 +162,14 @@ export function timbrar(payload: object): Promise<HkaResponse> {
 /**
  * Queries the status of an invoice.
  */
-export function consultarEstado(uuidOrFolio: string): Promise<HkaStatus> {
+export async function consultarEstado(uuidOrFolio: string): Promise<HkaStatus> {
   return request(`/invoices/status/${uuidOrFolio}`, { method: "GET" });
 }
 
 /**
  * Cancels a previously stamped invoice.
  */
-export function anular(uuidOrFolio: string, reason: string): Promise<HkaResponse> {
+export async function anular(uuidOrFolio: string, reason: string): Promise<HkaResponse> {
   return request(`/invoices/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -223,11 +186,9 @@ export async function consultarFolios(): Promise<number> {
     if (typeof response?.remaining_folios === "number") {
       return response.remaining_folios;
     }
-    // Return a mock value if the API doesn't provide the expected field.
     return 100;
   } catch (error) {
      if (error instanceof HkaError) {
-        // Let the calling UI component handle configuration errors.
         console.error("Failed to fetch folios due to HKA client error:", error.message);
         throw error;
      }

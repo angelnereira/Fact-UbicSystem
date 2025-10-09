@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { consultarEstado, HkaError } from '@/lib/hka/client';
+import { consultarEstado } from '@/lib/hka/actions';
+import { HkaError } from '@/lib/hka/types';
 
 /**
  * @swagger
@@ -30,8 +31,6 @@ export async function GET(request: Request, { params }: { params: { invoiceId: s
   }
 
   try {
-    // Aquí no pasamos un 'identifier' porque la consulta de estado puede no estar ligada a un webhook.
-    // getActiveHkaConfig tomará la primera configuración activa que encuentre.
     const statusResult = await consultarEstado(invoiceId);
     return NextResponse.json(statusResult, { status: 200 });
 

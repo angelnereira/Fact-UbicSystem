@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { anular, HkaError } from '@/lib/hka/client';
+import { anular } from '@/lib/hka/actions';
+import { HkaError } from '@/lib/hka/types';
 
 /**
  * @swagger
@@ -36,7 +37,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'El ID de la factura y el motivo son requeridos.' }, { status: 400 });
     }
 
-    // Al igual que en status, no se necesita un 'identifier' específico
     const hkaResponse = await anular(invoiceId, reason);
 
     return NextResponse.json(hkaResponse, { status: 200 });
