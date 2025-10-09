@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { timbrar } from '@/lib/hka/actions';
 import { HkaError } from '@/lib/hka/types';
 import { initializeFirebase } from '@/firebase/server';
-import { collection, addDoc, getDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 
 /**
  * @swagger
@@ -34,6 +34,7 @@ import { collection, addDoc, getDoc, doc } from 'firebase/firestore';
 export async function POST(request: Request) {
   const { firestore } = initializeFirebase();
   const invoiceSubmissionsRef = collection(firestore, 'invoiceSubmissions');
+  let submissionDocId: string | null = null;
 
   try {
     const body = await request.json();
@@ -46,12 +47,12 @@ export async function POST(request: Request) {
       );
     }
     
-    // Obtener la configuración del emisor
+    // Obtener la configuración del emisor desde Firestore
     const configRef = doc(firestore, 'configurations', 'global-settings');
     const configSnap = await getDoc(configRef);
 
     if (!configSnap.exists()) {
-        return NextResponse.json({ message: 'Configuración de emisor no encontrada.' }, { status: 400 });
+        return NextResponse.json({ message: 'Configuración de emisor no encontrada. Por favor, guarde la configuración de la empresa en la página de Configuración.' }, { status: 400 });
     }
     const configData = configSnap.data();
     const emisorConfig = {
@@ -60,8 +61,8 @@ export async function POST(request: Request) {
         name: configData.companyName
     };
     
-    if (!emisorConfig.ruc || !emisorConfig.dv) {
-        return NextResponse.json({ message: 'El RUC y DV del emisor no están configurados.' }, { status: 400 });
+    if (!emisorConfig.ruc || !emisorConfig.dv || !emisorConfig.name) {
+        return NextResponse.json({ message: 'El RUC, DV y nombre del emisor no están configurados completamente. Por favor, guarde la configuración de la empresa.' }, { status: 400 });
     }
     
     const submissionRecord = {
@@ -73,7 +74,9 @@ export async function POST(request: Request) {
     };
     
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
+    submissionDocId = submissionDocRef.id;
 
+    // Llamar a timbrar, ahora con la configuración del emisor obtenida
     const hkaResponse = await timbrar(invoicePayload, emisorConfig);
     
     const hkaResponsesRef = collection(firestore, 'hkaResponses');
@@ -86,8 +89,7 @@ export async function POST(request: Request) {
     const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
 
     // Actualizar el documento de sumisión
-    const submissionToUpdate = doc(firestore, 'invoiceSubmissions', submissionDocRef.id);
-    await submissionToUpdate.update({
+    await updateDoc(submissionDocRef, {
       status: 'certified',
       hkaResponseId: hkaResponseDocRef.id
     });
@@ -96,6 +98,13 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('Error en timbrado manual:', error);
+    
+    // Si hay un error, actualiza el registro de sumisión a 'failed'
+    if (submissionDocId) {
+        await updateDoc(doc(firestore, 'invoiceSubmissions', submissionDocId), {
+            status: 'failed',
+        });
+    }
 
     if (error instanceof HkaError) {
       return NextResponse.json(

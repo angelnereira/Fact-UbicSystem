@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -181,7 +182,6 @@ export default function MovementsPage() {
       return Array.from({ length: 5 }).map((_, i) => (
          <TableRow key={`skl-${i}`}>
           <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell><Skeleton className="h-6 w-20 rounded-full" /></TableCell>
           <TableCell><Skeleton className="h-4 w-40" /></TableCell>
           <TableCell className="text-right"><Skeleton className="h-8 w-20 ml-auto" /></TableCell>
@@ -192,7 +192,7 @@ export default function MovementsPage() {
     if (!movements || movements.length === 0) {
       return (
         <TableRow>
-          <TableCell colSpan={5} className="h-24 text-center">
+          <TableCell colSpan={4} className="h-24 text-center">
             <div>No hay movimientos que coincidan con tu búsqueda.</div>
           </TableCell>
         </TableRow>
@@ -210,9 +210,6 @@ export default function MovementsPage() {
         <TableRow key={mov.id}>
           <TableCell>
             {new Date(mov.submissionDate).toLocaleString()}
-          </TableCell>
-          <TableCell>
-            <Badge variant="outline">Timbrar</Badge>
           </TableCell>
           <TableCell>
             <Badge
@@ -360,7 +357,6 @@ export default function MovementsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Fecha y Hora</TableHead>
-                <TableHead>Acción</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Detalles</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>

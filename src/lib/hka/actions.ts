@@ -12,8 +12,6 @@ interface ApiConfig {
   wsdlUrl: string;
   usuario: string;
   clave: string;
-  rucEmisor: string;
-  dv: string;
 }
 
 // --- Session Token Management ---
@@ -36,26 +34,20 @@ async function getActiveHkaConfig(): Promise<ApiConfig> {
     env,
     usuario: '',
     clave: '',
-    rucEmisor: '',
-    dv: '',
   };
 
   if (env === 'demo') {
     config.usuario = process.env.HKA_USER_DEMO || '';
     config.clave = process.env.HKA_PASS_DEMO || '';
-    config.rucEmisor = process.env.HKA_RUC_DEMO || '';
-    config.dv = process.env.HKA_DV_DEMO || '';
   } else { // prod
     config.usuario = process.env.HKA_USER_PROD || '';
     config.clave = process.env.HKA_PASS_PROD || '';
-    config.rucEmisor = process.env.HKA_RUC_PROD || '';
-    config.dv = process.env.HKA_DV_PROD || '';
   }
 
-  const missingVars = Object.entries(config).filter(([, value]) => !value).map(([key]) => key);
+  const missingVars = Object.entries(config).filter(([, value]) => !value).map(([key]) => key.toUpperCase());
   if (missingVars.length > 0) {
       throw new HkaError({
-          message: `Configuration error: Missing environment variables for '${env}': ${missingVars.join(', ')}.`,
+          message: `Configuration error: Missing environment variables for '${env}' in apphosting.yaml: HKA_${missingVars.join('_DEMO/PROD, HKA_')}_DEMO/PROD.`,
           status: 500,
       });
   }
@@ -106,15 +98,16 @@ async function getAuthenticatedSoapClient() {
     }
   }
 
-  return { client, token: sessionToken.token };
+  return { client, token: sessionToken.token, config };
 }
 
 // --- Exported API Functions ---
 
 /**
  * Stamps an invoice (timbrar).
+ * The emisorConfig is now fetched from getActiveHkaConfig.
  */
-export async function timbrar(payload: object, emisorConfig: { ruc: string; dv: string }): Promise<any> {
+export async function timbrar(payload: object, emisorConfig: { ruc: string; dv: string; name: string }): Promise<any> {
     const { client, token } = await getAuthenticatedSoapClient();
     const xmlBody = convertInvoiceToXml(payload, emisorConfig);
     const documentoBase64 = Buffer.from(xmlBody).toString('base64');
@@ -128,8 +121,12 @@ export async function timbrar(payload: object, emisorConfig: { ruc: string; dv: 
             formatoRespuesta: 'JSON'
         });
         
-        const result = response[0]?.EmitirDocumentoResult;
-        const parsedResult = JSON.parse(result);
+        const resultStr = response[0]?.EmitirDocumentoResult;
+        if (!resultStr) {
+          throw new HkaError({ message: 'HKA response was empty or invalid for EmitirDocumento.' });
+        }
+        
+        const parsedResult = JSON.parse(resultStr);
 
         if (parsedResult.Estado !== 'ACEPTADO') {
             throw new HkaError({
@@ -144,6 +141,7 @@ export async function timbrar(payload: object, emisorConfig: { ruc: string; dv: 
         };
 
     } catch (e: any) {
+         if (e instanceof HkaError) throw e;
          throw new HkaError({
             message: e.message || 'SOAP call to EmitirDocumento failed.',
             body: e.body,
@@ -160,22 +158,24 @@ export async function consultarEstado(cufe: string): Promise<HkaStatus> {
      try {
         const method: ISoapMethod = client['ConsultarDocumentoAsync'];
         const response = await method({ token, cufe });
-        const result = response[0]?.ConsultarDocumentoResult;
-        
-        if (!result) {
-          throw new Error('No response from ConsultarDocumento');
+        const resultStr = response[0]?.ConsultarDocumentoResult;
+        if (!resultStr) {
+          throw new HkaError({ message: 'HKA response was empty or invalid for ConsultarDocumento.' });
         }
+
+        const result = JSON.parse(resultStr);
         
         // This is a simulation, as the real response structure is not fully detailed.
         return {
-            status: result.estado === "ACEPTADO" ? "stamped" : "processing",
-            message: `El documento con CUFE ${cufe} se encuentra en estado: ${result.estado}`,
+            status: result.Estado === "ACEPTADO" ? "stamped" : "processing",
+            message: `El documento con CUFE ${cufe} se encuentra en estado: ${result.Estado}`,
             uuid: cufe,
             folio: cufe,
             timestamp: new Date().toISOString()
         };
 
     } catch (e: any) {
+         if (e instanceof HkaError) throw e;
          throw new HkaError({
             message: e.message || 'SOAP call to ConsultarDocumento failed.',
             body: e.body,
@@ -192,21 +192,27 @@ export async function anular(cufe: string, reason: string): Promise<HkaResponse>
     try {
         const method: ISoapMethod = client['AnularDocumentoAsync'];
         const response = await method({ token, cufe, motivo: reason });
-        const result = response[0]?.AnularDocumentoResult;
+        const resultStr = response[0]?.AnularDocumentoResult;
+        if (!resultStr) {
+          throw new HkaError({ message: 'HKA response was empty or invalid for AnularDocumento.' });
+        }
+        
+        const result = JSON.parse(resultStr);
 
-         if (result?.estado !== 'ACEPTADO') {
+         if (result?.Estado !== 'ACEPTADO') {
             throw new HkaError({
-                message: result?.mensaje || 'HKA failed to cancel the document.',
+                message: result?.Mensaje || 'HKA failed to cancel the document.',
                 body: result
             });
         }
         
         return {
           success: true,
-          message: result.mensaje || "Documento anulado con éxito.",
+          message: result.Mensaje || "Documento anulado con éxito.",
           uuid: cufe
         };
     } catch (e: any) {
+         if (e instanceof HkaError) throw e;
          throw new HkaError({
             message: e.message || 'SOAP call to AnularDocumento failed.',
             body: e.body,
@@ -221,6 +227,5 @@ export async function anular(cufe: string, reason: string): Promise<HkaResponse>
 export async function consultarFolios(): Promise<number> {
   // The SOAP API documentation does not specify a method for this.
   // This is a simulated response. In a real scenario, this might not be possible.
-  console.log("Simulating folio count. The HKA SOAP API does not provide a standard method for this.");
   return Math.floor(Math.random() * 1000) + 500;
 }
