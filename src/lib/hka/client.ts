@@ -236,10 +236,10 @@ export async function consultarFolios(identifier?: string): Promise<number> {
   } catch (error) {
      if (error instanceof HkaError && (error.status === 404 || error.message.includes("No active HKA environment") || error.message.includes("HKA configuration not found in Firestore"))) {
         console.warn("HKA environment not configured or not found. Returning 0 folios.");
-        return 0;
+        throw error; // Re-throw to let the UI know about the configuration issue
      }
-     // For any other error during development/testing, return a mock value to avoid breaking the UI.
-     console.error("Failed to fetch folios, returning mock value.", error);
-     throw error; // Re-throw the original error to be caught by the calling component
+     // For any other error during development/testing, re-throw to be caught by the calling component.
+     console.error("Failed to fetch folios.", error);
+     throw error;
   }
 }

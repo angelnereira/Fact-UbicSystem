@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Fact-UbicSystem
 
 **Fact-UbicSystem** es una aplicación web que funciona como un puente de integración para la facturación electrónica con el sistema de **The Factory HKA**. Permite gestionar, monitorear y automatizar el proceso de timbrado, consulta y anulación de facturas electrónicas.
@@ -25,6 +24,3 @@
     ```
 
 La aplicación estará disponible en `http://localhost:3000` (o el puerto que tengas configurado).
-=======
-
->>>>>>> 13c54c7d62af3e54bdaea58d54e06a4bf7b1c8ad

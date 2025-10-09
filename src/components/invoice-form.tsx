@@ -92,7 +92,7 @@ export function InvoiceForm() {
 
         const items = Array.isArray(itemsNode.item) ? itemsNode.item : [itemsNode.item];
         
-        if (!items || items.length === 0) {
+        if (!items || items.length === 0 || !items[0]) {
             throw new Error("No se encontraron ítems en el nodo <items> del XML.");
         }
 
@@ -103,6 +103,8 @@ export function InvoiceForm() {
               qty: parseFloat(item.cantidad._text),
               unitPrice: parseFloat(item.precioUnitario._text),
             });
+          } else {
+             throw new Error("Uno de los ítems en el XML tiene una estructura inválida.");
           }
         });
 
