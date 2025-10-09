@@ -3,8 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
-import { PlusCircle, Trash2, Loader2, Upload } from "lucide-react";
-import convert from "xml-js";
+import { PlusCircle, Trash2, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,8 +18,18 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useConfigurations } from "@/hooks/use-configurations";
 
 const invoiceFormSchema = z.object({
+  configId: z.string().min(1, "Debes seleccionar un cliente."),
+  environment: z.enum(["demo", "prod"]),
   externalId: z.string().min(1, {
     message: "El ID externo es requerido.",
   }),
@@ -45,10 +54,12 @@ type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
 const defaultValues: Partial<InvoiceFormValues> = {
   items: [{ desc: "", qty: 1, unitPrice: 0 }],
+  environment: "demo",
 };
 
 export function InvoiceForm() {
   const { toast } = useToast();
+  const { configs, loading: loadingConfigs } = useConfigurations();
 
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
@@ -60,73 +71,9 @@ export function InvoiceForm() {
     control: form.control,
     name: "items",
   });
-  
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const xmlString = e.target?.result as string;
-      try {
-        const result = convert.xml2js(xmlString, { compact: true, spaces: 2 });
-        const invoiceNode = result.factura;
-        
-        if (!invoiceNode) {
-          throw new Error("El nodo raíz <factura> no fue encontrado en el XML.");
-        }
-
-        const header = invoiceNode.encabezado;
-        const client = invoiceNode.cliente;
-        const itemsNode = invoiceNode.items;
-
-        if (!header || !client || !itemsNode) {
-          throw new Error("La estructura del XML es inválida. Faltan los nodos <encabezado>, <cliente> o <items>.");
-        }
-
-        form.setValue("externalId", header.idExterno?._text || "");
-        form.setValue("customerName", client.nombre?._text || "");
-        form.setValue("customerRuc", client.ruc?._text || "");
-
-        remove(); // Clear default/existing items
-
-        const items = Array.isArray(itemsNode.item) ? itemsNode.item : [itemsNode.item];
-        
-        if (!items || items.length === 0 || !items[0]) {
-            throw new Error("No se encontraron ítems en el nodo <items> del XML.");
-        }
-
-        items.forEach((item: any) => {
-          if (item?.descripcion?._text && item?.cantidad?._text && item?.precioUnitario?._text) {
-            append({
-              desc: item.descripcion._text,
-              qty: parseFloat(item.cantidad._text),
-              unitPrice: parseFloat(item.precioUnitario._text),
-            });
-          } else {
-             throw new Error("Uno de los ítems en el XML tiene una estructura inválida.");
-          }
-        });
-
-        toast({
-          title: "XML Cargado Correctamente",
-          description: "Los datos del archivo XML han sido cargados en el formulario.",
-        });
-
-      } catch (error: any) {
-        toast({
-          variant: "destructive",
-          title: "Error al Procesar XML",
-          description: error.message || "El archivo no tiene el formato esperado o está corrupto.",
-        });
-        console.error("XML Parsing Error:", error);
-      }
-    };
-    reader.readAsText(file);
-  };
 
   async function onSubmit(data: InvoiceFormValues) {
-    const payload = { invoice: data };
+    const { configId, environment, ...invoiceData } = data;
     
     toast({
       title: "Timbrando Factura...",
@@ -139,7 +86,11 @@ export function InvoiceForm() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ 
+          invoice: invoiceData,
+          configId,
+          environment,
+        }),
       });
 
       const result = await response.json();
@@ -153,8 +104,7 @@ export function InvoiceForm() {
         description: `Factura con UUID: ${result.uuid}`,
       });
 
-      form.reset();
-      // Reset items array to default
+      form.reset(defaultValues);
       remove();
       append({ desc: "", qty: 1, unitPrice: 0 });
 
@@ -178,37 +128,54 @@ export function InvoiceForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         
-         <div className="flex flex-col md:flex-row gap-4 items-start">
-            <div className="flex-grow space-y-4">
-                <h3 className="text-lg font-medium">Cargar desde Archivo</h3>
-                <div className="flex items-center gap-2">
-                    <FormField
-                    control={form.control}
-                    name="externalId" // Campo dummy, no se usa directamente para el input de archivo
-                    render={({ field }) => (
-                        <FormItem className="w-full">
-                        <FormLabel htmlFor="xml-upload" className="sr-only">Cargar XML</FormLabel>
-                        <FormControl>
-                            <Input id="xml-upload" type="file" accept=".xml,text/xml" onChange={handleFileChange} className="w-full" />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                    <Button type="button" variant="outline" className="h-10 w-10 p-0" onClick={() => document.getElementById('xml-upload')?.click()}>
-                        <Upload className="h-5 w-5" />
-                    </Button>
-                </div>
-                <FormMessage />
-            </div>
-            <Separator orientation="vertical" className="mx-4 h-auto hidden md:block" />
-            <Separator className="md:hidden"/>
-            <div className="flex-grow w-full">
-                <h3 className="text-lg font-medium mb-4">O llenar manualmente</h3>
-                {/* Manual fields will go here, but for now we focus on XML */}
-            </div>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="configId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cliente HKA</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingConfigs}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona el cliente emisor..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {configs.map((config) => (
+                        <SelectItem key={config.id} value={config.id}>
+                          {config.companyName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="environment"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Ambiente HKA</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona el ambiente..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="demo">Demo</SelectItem>
+                      <SelectItem value="prod">Producción</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
         </div>
-        
+
         <Separator />
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
