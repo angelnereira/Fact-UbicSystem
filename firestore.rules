@@ -1,111 +1,119 @@
 /**
- * @fileoverview Firestore Security Rules for the e-Factura Bridge application.
+ * @file Firebase Security Rules for e-Factura Bridge.
  *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for user data, while allowing public read access to configurations, invoice submissions, and HKA responses.  Write access to all collections except /users/{userId} is restricted and should be modified to enforce proper authorization as the application evolves from the prototyping stage.
+ * @Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for user profiles
+ * and allows read-only access to configurations. Invoice submissions and
+ * HKA responses are secured to prevent unauthorized modification or deletion.
  *
- * Data Structure:
- * - /users/{userId}: Stores user profiles, accessible only to the respective user.
- * - /configurations/{configurationId}: Stores system-wide configurations. Publicly readable, but write access is currently open (TODO: restrict).
- * - /invoiceSubmissions/{invoiceSubmissionId}: Stores invoice submissions. Publicly readable, but write access is currently open (TODO: restrict).
- * - /hkaResponses/{hkaResponseId}: Stores HKA responses. Publicly readable, but write access is currently open (TODO: restrict).
+ * @Data Structure:
+ * - /users/{userId}: Stores user profile data, accessible only by the user themselves.
+ * - /configurations/{configId}: Stores system configurations, publicly readable but not writable by clients.
+ * - /invoiceSubmissions/{submissionId}: Stores incoming invoice submissions, publicly readable but not writable by clients.
+ * - /hkaResponses/{responseId}: Stores responses from the HKA API, publicly readable but not writable by clients.
  *
- * Key Security Decisions:
- * - User listing is explicitly denied to protect user privacy.
- * - Configurations, invoice submissions, and HKA responses are publicly readable. Write access is not restricted. This should be restricted in the production environment.
+ * @Key Security Decisions:
+ * - User listing is disallowed to prevent enumeration.
+ * - All write operations (create, update, delete) are explicitly controlled and never use `if true;`.
+ * - Data shapes are not validated in this prototyping phase, focusing on authorization instead.
+ *
+ * @Denormalization for Authorization:
+ *   - No explicit denormalization is used in this version, as the current access patterns are simple.
+ *   - Future iterations may require denormalization to optimize more complex authorization logic.
+ *
+ * @Structural Segregation:
+ *   - No structural segregation is employed in this version.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is made by the owner of the resource.
-     * @param {string} userId - The user ID to check against.
-     * @return {bool} - True if the user ID matches the authenticated user's ID, false otherwise.
-     */
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the user is signed in.
-     * @return {bool} True if the user is signed in, false otherwise.
-     */
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    /**
-     * @description Security rules for user documents.
+     * @description Controls access to user profile data.
      * @path /users/{userId}
-     * @allow (create) User with ID 'user_abc' can create their own profile.
-     * @deny (create) User with ID 'user_abc' cannot create a profile with a different ID ('user_xyz').
-     * @allow (get) User with ID 'user_abc' can read their own profile.
-     * @deny (get) User with ID 'user_abc' cannot read another user's profile ('user_xyz').
-     * @allow (update) User with ID 'user_abc' can update their own profile.
-     * @deny (update) User with ID 'user_abc' cannot update another user's profile ('user_xyz').
-     * @allow (delete) User with ID 'user_abc' can delete their own profile.
-     * @deny (delete) User with ID 'user_abc' cannot delete another user's profile ('user_xyz').
-     * @principle Enforces document ownership for writes and reads.
+     * @allow (create) User with ID 'user123' can create their own profile.
+     * @allow (get) User with ID 'user123' can read their own profile.
+     * @allow (update) User with ID 'user123' can update their own profile.
+     * @allow (delete) User with ID 'user123' can delete their own profile.
+     * @deny (create) User with ID 'user123' cannot create a profile with ID 'user456'.
+     * @deny (get) User with ID 'user123' cannot read profile with ID 'user456'.
+     * @deny (update) User with ID 'user123' cannot update profile with ID 'user456'.
+     * @deny (delete) User with ID 'user123' cannot delete profile with ID 'user456'.
+     * @principle Enforces document ownership for all operations on user profiles.
      */
     match /users/{userId} {
+      // Helper function to check if the request is from the owner of the user document.
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      // Helper function to check if the user document exists and the user is the owner
+      function isExistingOwner(userId) {
+          return isOwner(userId) && resource != null;
+      }
+
       allow get: if isOwner(userId);
-      allow list: if false;
-
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isOwner(userId) && resource.data.id == userId;
-      allow delete: if isOwner(userId) && resource.data.id == userId;
+      allow list: if false; // User listing is disallowed.
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Security rules for configurations.
-     * @path /configurations/{configurationId}
-     * @allow (get) Any user can read any configuration.
-     * @allow (list) Any user can list configurations.
-     * @deny (create) No one can create configurations (currently, TODO: restrict).
-     * @deny (update) No one can update configurations (currently, TODO: restrict).
-     * @deny (delete) No one can delete configurations (currently, TODO: restrict).
-     * @principle Public read access with unrestricted writes.
+     * @description Controls access to system configurations.
+     * @path /configurations/{configId}
+     * @allow (get) Any user can read system configurations.
+     * @deny (create) No user can create system configurations through client-side rules.
+     * @deny (update) No user can update system configurations through client-side rules.
+     * @deny (delete) No user can delete system configurations through client-side rules.
+     * @principle Allows public read access to configurations but restricts write access.
      */
-    match /configurations/{configurationId} {
-      allow get, list: if true;
-      allow create: if false; // TODO: Add authorization checks.
-      allow update: if false; // TODO: Add authorization checks.
-      allow delete: if false; // TODO: Add authorization checks.
+    match /configurations/{configId} {
+      allow get: if true;
+      allow list: if true;
+
+      // No write operations are allowed from the client.
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+     /**
+      * @description Controls access to invoice submissions.
+      * @path /invoiceSubmissions/{submissionId}
+      * @allow (get) Any user can read invoice submissions.
+      * @deny (create) No user can create invoice submissions through client-side rules.
+      * @deny (update) No user can update invoice submissions through client-side rules.
+      * @deny (delete) No user can delete invoice submissions through client-side rules.
+      * @principle Allows public read access to invoice submissions but restricts write access.
+      */
+    match /invoiceSubmissions/{submissionId} {
+      allow get: if true;
+      allow list: if true;
+
+      // No write operations are allowed from the client.
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Security rules for invoice submissions.
-     * @path /invoiceSubmissions/{invoiceSubmissionId}
-     * @allow (get) Any user can read any invoice submission.
-     * @allow (list) Any user can list invoice submissions.
-     * @deny (create) No one can create invoice submissions (currently, TODO: restrict).
-     * @deny (update) No one can update invoice submissions (currently, TODO: restrict).
-     * @deny (delete) No one can delete invoice submissions (currently, TODO: restrict).
-     * @principle Public read access with unrestricted writes.
+     * @description Controls access to HKA responses.
+     * @path /hkaResponses/{responseId}
+     * @allow (get) Any user can read HKA responses.
+     * @deny (create) No user can create HKA responses through client-side rules.
+     * @deny (update) No user can update HKA responses through client-side rules.
+     * @deny (delete) No user can delete HKA responses through client-side rules.
+     * @principle Allows public read access to HKA responses but restricts write access.
      */
-    match /invoiceSubmissions/{invoiceSubmissionId} {
-      allow get, list: if true;
-      allow create: if false; // TODO: Add authorization checks.
-      allow update: if false; // TODO: Add authorization checks.
-      allow delete: if false; // TODO: Add authorization checks.
-    }
+    match /hkaResponses/{responseId} {
+      allow get: if true;
+      allow list: if true;
 
-    /**
-     * @description Security rules for HKA responses.
-     * @path /hkaResponses/{hkaResponseId}
-     * @allow (get) Any user can read any HKA response.
-     * @allow (list) Any user can list HKA responses.
-     * @deny (create) No one can create HKA responses (currently, TODO: restrict).
-     * @deny (update) No one can update HKA responses (currently, TODO: restrict).
-     * @deny (delete) No one can delete HKA responses (currently, TODO: restrict).
-     * @principle Public read access with unrestricted writes.
-     */
-    match /hkaResponses/{hkaResponseId} {
-      allow get, list: if true;
-      allow create: if false; // TODO: Add authorization checks.
-      allow update: if false; // TODO: Add authorization checks.
-      allow delete: if false; // TODO: Add authorization checks.
+      // No write operations are allowed from the client.
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }
