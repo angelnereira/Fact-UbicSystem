@@ -62,15 +62,19 @@ async function getActiveHkaConfig(): Promise<ApiConfig> {
 
   if (env === 'demo') {
     config.apiKey = process.env.HKA_API_KEY_DEMO || '';
-    config.baseUrl = process.env.NEXT_PUBLIC_HKA_API_BASE_DEMO || '';
+    config.baseUrl = process.env.HKA_API_BASE_DEMO || '';
   } else { // prod
     config.apiKey = process.env.HKA_API_KEY_PROD || '';
-    config.baseUrl = process.env.NEXT_PUBLIC_HKA_API_BASE_PROD || '';
+    config.baseUrl = process.env.HKA_API_BASE_PROD || '';
   }
 
   if (!config.apiKey || !config.baseUrl) {
+    const missingVars = [];
+    if (!config.apiKey) missingVars.push(env === 'demo' ? 'HKA_API_KEY_DEMO' : 'HKA_API_KEY_PROD');
+    if (!config.baseUrl) missingVars.push(env === 'demo' ? 'HKA_API_BASE_DEMO' : 'HKA_API_BASE_PROD');
+    
     throw new HkaError({
-      message: `Configuration error: Missing environment variables for '${env}' environment. Please set HKA_API_KEY_${env.toUpperCase()} and NEXT_PUBLIC_HKA_API_BASE_${env.toUpperCase()}.`,
+      message: `Configuration error: Missing environment variables for '${env}' environment. Please set: ${missingVars.join(', ')}.`,
       status: 500,
     });
   }

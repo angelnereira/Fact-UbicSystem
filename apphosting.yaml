@@ -17,16 +17,15 @@ env:
       - BUILD
       - RUNTIME
 
-  - variable: NEXT_PUBLIC_HKA_API_BASE_PROD
+  # --- Server-Side Variables (Not exposed to client) ---
+  - variable: HKA_API_BASE_PROD
     value: "https://api.hka.production.example"
     availability:
-      - BUILD
       - RUNTIME
-
-  - variable: NEXT_PUBLIC_HKA_API_BASE_DEMO
+      
+  - variable: HKA_API_BASE_DEMO
     value: "https://api.hka.demo.example"
     availability:
-      - BUILD
       - RUNTIME
 
   # --- Secret Variables ---

@@ -14,25 +14,33 @@ import { Terminal } from "lucide-react";
 
 export default function SettingsPage() {
   const codeSnippet = `
+# apphosting.yaml
+
 runConfig:
   # ...
 env:
-  # Public variable for the environment (demo or prod)
+  # Variable pública para el ambiente (demo o prod)
   - variable: NEXT_PUBLIC_HKA_ENV
     value: "demo" 
     availability: [BUILD, RUNTIME]
 
-  # Sensitive API key for the demo environment
-  - variable: HKA_API_KEY_DEMO
-    secret: HKA_API_KEY_DEMO # Name of the secret in Secret Manager
+  # URLs base para los ambientes (solo en el servidor)
+  - variable: HKA_API_BASE_DEMO
+    value: "https://url.de.tu.api.demo"
+    availability: [RUNTIME]
+  - variable: HKA_API_BASE_PROD
+    value: "https://url.de.tu.api.prod"
     availability: [RUNTIME]
 
-  # Sensitive API key for the production environment
+  # Llave de API para el ambiente de demo (secreto)
+  - variable: HKA_API_KEY_DEMO
+    secret: HKA_API_KEY_DEMO # Nombre del secreto en Secret Manager
+    availability: [RUNTIME]
+
+  # Llave de API para el ambiente de producción (secreto)
   - variable: HKA_API_KEY_PROD
     secret: HKA_API_KEY_PROD
     availability: [RUNTIME]
-  
-  # Other variables like NEXT_PUBLIC_HKA_API_BASE_DEMO...
   `;
 
   const cliCommand = `firebase apphosting:secrets:set HKA_API_KEY_DEMO`;
