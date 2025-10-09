@@ -1,5 +1,6 @@
 
 'use client';
+import * as React from "react";
 import { AlertTriangle, CheckCircle } from "lucide-react";
 import {
   Card,
@@ -9,25 +10,45 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
-import { useFirestore, useCollection, useMemoFirebase } from "@/firebase";
-import { collection, query, limit } from "firebase/firestore";
+import { useFirestore, useMemoFirebase, useDoc } from "@/firebase";
+import { collection, query, limit, getDocs, doc } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TestDbPage() {
   const firestore = useFirestore();
 
-  const submissionsQuery = useMemoFirebase(
-    () =>
-      firestore
-        ? query(collection(firestore, "invoiceSubmissions"), limit(1))
-        : null,
-    [firestore]
-  );
-  
-  const { data: submissionsData, isLoading, error } = useCollection(submissionsQuery);
+  // This component tests the database connection by attempting to read a single
+  // document from the 'invoiceSubmissions' collection.
+  const [testDocId, setTestDocId] = React.useState<string | null>(null);
 
-  const dbError = error;
-  const dbResult = submissionsData?.[0];
+  React.useEffect(() => {
+    if (!firestore) return;
+    const getOneDoc = async () => {
+        try {
+            const q = query(collection(firestore, "invoiceSubmissions"), limit(1));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                setTestDocId(snapshot.docs[0].id);
+            }
+        } catch (e) {
+            // Error will be handled by the useDoc hook below
+            console.error("Error fetching a test document ID:", e);
+        }
+    };
+    getOneDoc();
+  }, [firestore]);
+
+
+  const submissionDocRef = useMemoFirebase(
+    () =>
+      firestore && testDocId
+        ? doc(firestore, "invoiceSubmissions", testDocId)
+        : null,
+    [firestore, testDocId]
+  );
+
+  const { data: dbResult, isLoading, error: dbError } = useDoc(submissionDocRef);
+
 
   const renderContent = () => {
     if (isLoading) {
@@ -87,7 +108,7 @@ export default function TestDbPage() {
           </p>
           <div className="rounded-md bg-muted p-4">
             <pre className="text-sm text-foreground overflow-auto">
-              <code>{JSON.stringify(dbResult, null, 2) || "No se encontraron documentos en 'invoiceSubmissions'."}</code>
+              <code>{JSON.stringify(dbResult, null, 2) || "No se encontraron documentos en 'invoiceSubmissions', pero la conexión fue exitosa."}</code>
             </pre>
           </div>
         </CardContent>
