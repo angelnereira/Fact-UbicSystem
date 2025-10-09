@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { anular } from '@/lib/hka/actions';
 import { HkaError } from '@/lib/hka/types';
@@ -7,7 +8,7 @@ import { HkaError } from '@/lib/hka/types';
  * /api/hka/cancel:
  *   post:
  *     summary: Solicita la anulación de una factura.
- *     description: Envía una solicitud para anular una factura timbrada previamente.
+ *     description: Envía una solicitud para anular una factura timbrada previamente, usando una configuración de cliente específica.
  *     requestBody:
  *       required: true
  *       content:
@@ -21,6 +22,12 @@ import { HkaError } from '@/lib/hka/types';
  *               reason:
  *                 type: string
  *                 description: El motivo de la anulación.
+ *               configId:
+ *                 type: string
+ *                 description: El ID del documento de configuración a utilizar.
+ *               environment:
+ *                 type: string
+ *                 description: El ambiente a utilizar ('demo' o 'prod').
  *     responses:
  *       '200':
  *         description: Solicitud de anulación enviada exitosamente.
@@ -31,13 +38,13 @@ import { HkaError } from '@/lib/hka/types';
  */
 export async function POST(request: Request) {
   try {
-    const { invoiceId, reason } = await request.json();
+    const { invoiceId, reason, configId, environment } = await request.json();
 
-    if (!invoiceId || !reason) {
-      return NextResponse.json({ message: 'El ID de la factura y el motivo son requeridos.' }, { status: 400 });
+    if (!invoiceId || !reason || !configId || !environment) {
+      return NextResponse.json({ message: 'Los campos invoiceId, reason, configId y environment son requeridos.' }, { status: 400 });
     }
 
-    const hkaResponse = await anular(invoiceId, reason);
+    const hkaResponse = await anular(invoiceId, reason, configId, environment);
 
     return NextResponse.json(hkaResponse, { status: 200 });
 

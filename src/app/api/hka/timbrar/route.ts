@@ -12,8 +12,8 @@ import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
  *     summary: Timbra una factura manualmente desde la UI.
  *     description: |
  *       Recibe los datos de una factura desde el formulario, crea un registro de sumisión
- *       y la envía a timbrar a HKA. Las credenciales del emisor se obtienen
- *       automáticamente desde la configuración del entorno del servidor.
+ *       y la envía a timbrar a HKA. Las credenciales del emisor se cargan
+ *       dinámicamente desde Firestore usando el configId proporcionado.
  *     requestBody:
  *       required: true
  *       content:
@@ -24,6 +24,12 @@ import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
  *               invoice:
  *                 type: object
  *                 description: El objeto de la factura a timbrar.
+ *               configId:
+ *                 type: string
+ *                 description: El ID del documento de configuración a utilizar.
+ *               environment:
+ *                 type: string
+ *                 description: El ambiente a utilizar ('demo' o 'prod').
  *     responses:
  *       '200':
  *         description: Factura timbrada exitosamente.
@@ -39,11 +45,11 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const invoicePayload = body.invoice;
+    const { invoice: invoicePayload, configId, environment } = body;
 
-    if (!invoicePayload) {
+    if (!invoicePayload || !configId || !environment) {
       return NextResponse.json(
-        { message: 'El payload de la factura (invoice) es requerido.' },
+        { message: 'Los campos invoice, configId, y environment son requeridos.' },
         { status: 400 }
       );
     }
@@ -53,14 +59,15 @@ export async function POST(request: Request) {
       invoiceData: JSON.stringify(invoicePayload),
       status: 'pending',
       hkaResponseId: null,
-      source: 'manual' // Indica que vino del formulario
+      source: 'manual', // Indica que vino del formulario
+      configId,
     };
     
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
     submissionDocId = submissionDocRef.id;
 
-    // Llamar a timbrar. La configuración del emisor se maneja dentro de la acción.
-    const hkaResponse = await timbrar(invoicePayload);
+    // Llamar a timbrar con la configuración dinámica.
+    const hkaResponse = await timbrar(invoicePayload, configId, environment);
     
     const hkaResponsesRef = collection(firestore, 'hkaResponses');
     const hkaResponseRecord = {

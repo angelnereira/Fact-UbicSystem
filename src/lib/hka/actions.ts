@@ -4,8 +4,10 @@
 import { createClientAsync, ISoapMethod } from 'soap';
 import { HkaError, type HkaResponse, type HkaStatus } from './types';
 import { convertInvoiceToXml } from './utils';
+import { initializeFirebase } from '@/firebase/server';
+import { doc, getDoc } from 'firebase/firestore';
 
-type HkaEnv = 'prod' | 'demo';
+type HkaEnv = 'demo' | 'prod';
 
 interface ApiConfig {
   env: HkaEnv;
@@ -16,75 +18,86 @@ interface ApiConfig {
   emisorDv: string;
 }
 
+interface ClientConfiguration {
+    companyName: string;
+    companyRuc: string;
+    webhookIdentifier: string;
+    demoUser?: string;
+    demoPass?: string;
+    demoRuc?: string;
+    demoDv?: string;
+    prodUser?: string;
+    prodPass?: string;
+    prodRuc?: string;
+    prodDv?: string;
+}
+
 // --- Session Token Management ---
-let sessionToken: { token: string; expires: number } | null = null;
+// A simple in-memory cache for session tokens. Keyed by a unique identifier for the config.
+const tokenCache = new Map<string, { token: string; expires: number }>();
+
 
 /**
- * Gets the active HKA API configuration from environment variables.
- * This is the single source of truth for all credentials.
+ * Gets the active HKA API configuration from a Firestore document.
+ * @param configId The ID of the configuration document in Firestore.
+ * @param env The environment ('demo' or 'prod') to get credentials for.
  */
-function getActiveHkaConfig(): ApiConfig {
-  const env = process.env.NEXT_PUBLIC_HKA_ENV as HkaEnv;
+async function getHkaConfig(configId: string, env: HkaEnv): Promise<ApiConfig> {
+    if (!configId) {
+        throw new HkaError({ message: "No configuration ID provided.", status: 400 });
+    }
 
-  if (env !== 'demo' && env !== 'prod') {
-    throw new HkaError({
-      message: "Configuration error: NEXT_PUBLIC_HKA_ENV must be set to 'demo' or 'prod'.",
-      status: 500,
-    });
-  }
+    const { firestore } = initializeFirebase();
+    const configRef = doc(firestore, 'configurations', configId);
+    const configSnap = await getDoc(configRef);
 
-  const config: Omit<ApiConfig, 'wsdlUrl' | 'env'> = {
-    usuario: '',
-    clave: '',
-    emisorRuc: '',
-    emisorDv: '',
-  };
-  
-  const varMap: { [key: string]: 'usuario' | 'clave' | 'emisorRuc' | 'emisorDv' } = {
-      [env === 'demo' ? 'HKA_USER_DEMO' : 'HKA_USER_PROD']: 'usuario',
-      [env === 'demo' ? 'HKA_PASS_DEMO' : 'HKA_PASS_PROD']: 'clave',
-      [env === 'demo' ? 'HKA_RUC_DEMO' : 'HKA_RUC_PROD']: 'emisorRuc',
-      [env === 'demo' ? 'HKA_DV_DEMO' : 'HKA_DV_PROD']: 'emisorDv',
-  };
+    if (!configSnap.exists()) {
+        throw new HkaError({ message: `Configuration with ID '${configId}' not found.`, status: 404 });
+    }
 
-  const missingVars: string[] = [];
-  
-  for (const envVar in varMap) {
-      const value = process.env[envVar];
-      if (value) {
-          config[varMap[envVar]] = value;
-      } else {
-          missingVars.push(envVar);
-      }
-  }
+    const configData = configSnap.data() as ClientConfiguration;
 
-  if (missingVars.length > 0) {
-      throw new HkaError({
-          message: `Configuration error in apphosting.yaml: The following secrets are missing for the '${env}' environment: ${missingVars.join(', ')}.`,
-          status: 500,
-      });
-  }
+    const credentials = {
+        usuario: env === 'demo' ? configData.demoUser : configData.prodUser,
+        clave: env === 'demo' ? configData.demoPass : configData.prodPass,
+        emisorRuc: env === 'demo' ? configData.demoRuc : configData.prodRuc,
+        emisorDv: env === 'demo' ? configData.demoDv : configData.prodDv,
+    };
 
-  return {
-    ...config,
-    env,
-    wsdlUrl: env === 'demo'
-      ? 'https://demoemision.thefactoryhka.com.pa/ws/obj/v1.0/Service.svc?wsdl'
-      : 'https://emision.thefactoryhka.com.pa/ws/obj/v1.0/Service.svc?wsdl'
-  };
+    const missingFields = Object.entries(credentials)
+        .filter(([, value]) => !value)
+        .map(([key]) => key);
+
+    if (missingFields.length > 0) {
+        throw new HkaError({
+            message: `Configuration '${configData.companyName}' is incomplete for the '${env}' environment. Missing fields: ${missingFields.join(', ')}.`,
+            status: 400,
+        });
+    }
+
+    return {
+        ...credentials,
+        env,
+        wsdlUrl: env === 'demo'
+            ? 'https://demoemision.thefactoryhka.com.pa/ws/obj/v1.0/Service.svc?wsdl'
+            : 'https://emision.thefactoryhka.com.pa/ws/obj/v1.0/Service.svc?wsdl',
+    } as ApiConfig;
 }
 
 
 /**
  * Creates a SOAP client, authenticates if necessary, and returns the client and token.
  */
-async function getAuthenticatedSoapClient() {
-  const config = getActiveHkaConfig();
+async function getAuthenticatedSoapClient(configId: string, env: HkaEnv) {
+  const config = await getHkaConfig(configId, env);
   const client = await createClientAsync(config.wsdlUrl);
+
+  const cacheKey = `${configId}-${env}`;
+  let sessionToken = tokenCache.get(cacheKey);
 
   const now = Date.now();
   if (!sessionToken || sessionToken.expires < now) {
-    console.log("Token is expired or not found. Authenticating with HKA...");
+    console.log(`Token for '${cacheKey}' is expired or not found. Authenticating with HKA...`);
     try {
       const authMethod: ISoapMethod = client['AutenticarAsync'];
       const response = await authMethod({
@@ -102,7 +115,9 @@ async function getAuthenticatedSoapClient() {
         // HKA token is valid for 10 mins, let's refresh it after 9 mins.
         expires: now + 9 * 60 * 1000,
       };
-      console.log("New HKA token obtained.");
+      tokenCache.set(cacheKey, sessionToken);
+      console.log(`New HKA token obtained for '${cacheKey}'.`);
+
     } catch (e: any) {
       throw new HkaError({
         message: e.message || 'HKA Authentication failed.',
@@ -119,15 +134,17 @@ async function getAuthenticatedSoapClient() {
 
 /**
  * Stamps an invoice (timbrar).
- * The emisorConfig is now fetched internally from environment variables.
+ * @param payload The invoice data.
+ * @param configId The ID of the client configuration to use.
+ * @param env The environment to use ('demo' or 'prod').
  */
-export async function timbrar(payload: object): Promise<any> {
-    const { client, token, config } = await getAuthenticatedSoapClient();
+export async function timbrar(payload: object, configId: string, env: HkaEnv): Promise<any> {
+    const { client, token, config } = await getAuthenticatedSoapClient(configId, env);
     
     const emisorConfig = {
       ruc: config.emisorRuc,
       dv: config.emisorDv,
-      name: "Placeholder Company Name" // This can be enhanced later if needed
+      name: "Placeholder Company Name" 
     };
 
     const xmlBody = convertInvoiceToXml(payload, emisorConfig);
@@ -173,9 +190,12 @@ export async function timbrar(payload: object): Promise<any> {
 
 /**
  * Queries the status of an invoice.
+ * @param cufe The unique CUFE identifier of the invoice.
+ * @param configId The ID of the client configuration to use.
+ * @param env The environment to use ('demo' or 'prod').
  */
-export async function consultarEstado(cufe: string): Promise<HkaStatus> {
-    const { client, token } = await getAuthenticatedSoapClient();
+export async function consultarEstado(cufe: string, configId: string, env: HkaEnv): Promise<HkaStatus> {
+    const { client, token } = await getAuthenticatedSoapClient(configId, env);
      try {
         const method: ISoapMethod = client['ConsultarDocumentoAsync'];
         const response = await method({ token, cufe });
@@ -206,9 +226,13 @@ export async function consultarEstado(cufe: string): Promise<HkaStatus> {
 
 /**
  * Cancels a previously stamped invoice.
+ * @param cufe The unique CUFE identifier of the invoice.
+ * @param reason The reason for cancellation.
+ * @param configId The ID of the client configuration to use.
+ * @param env The environment to use ('demo' or 'prod').
  */
-export async function anular(cufe: string, reason: string): Promise<HkaResponse> {
-    const { client, token } = await getAuthenticatedSoapClient();
+export async function anular(cufe: string, reason: string, configId: string, env: HkaEnv): Promise<HkaResponse> {
+    const { client, token } = await getAuthenticatedSoapClient(configId, env);
     try {
         const method: ISoapMethod = client['AnularDocumentoAsync'];
         const response = await method({ token, cufe, motivo: reason });
@@ -242,10 +266,12 @@ export async function anular(cufe: string, reason: string): Promise<HkaResponse>
 }
 
 /**
- * Consults the number of remaining folios. This is a real call now.
+ * Consults the number of remaining folios.
+ * @param configId The ID of the client configuration to use.
+ * @param env The environment to use ('demo' or 'prod').
  */
-export async function consultarFolios(): Promise<number> {
-    const { client, token } = await getAuthenticatedSoapClient();
+export async function consultarFolios(configId: string, env: HkaEnv): Promise<number> {
+    const { client, token } = await getAuthenticatedSoapClient(configId, env);
     try {
         const method: ISoapMethod = client['ConsultarCreditosDisponiblesAsync'];
         const response = await method({ token });
@@ -265,7 +291,10 @@ export async function consultarFolios(): Promise<number> {
             throw error;
         }
         console.error("Failed to fetch folios.", error);
-        // Return a value indicating an error to the UI
-        return -1;
+        throw new HkaError({
+            message: error.message || 'SOAP call to ConsultarCreditosDisponibles failed.',
+            body: error.body,
+            status: 500,
+        });
     }
 }

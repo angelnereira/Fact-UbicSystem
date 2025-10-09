@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { timbrar } from '@/lib/hka/actions';
 import { HkaError } from '@/lib/hka/types';
 import { initializeFirebase } from '@/firebase/server';
-import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, query, where, getDocs, limit } from 'firebase/firestore';
 
 
 /**
@@ -17,15 +17,14 @@ import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
  *       cuando se necesita procesar y timbrar una nueva factura. El `identifier` en la URL es un slug
  *       único configurado por el usuario para identificar su empresa. El payload debe contener la
  *       información de la factura.
- *       NOTA: Con la nueva arquitectura, el `identifier` ya no se usa para buscar credenciales en BD,
- *       pero se mantiene por compatibilidad. La configuración se carga desde variables de entorno.
+ *       La configuración del cliente (credenciales) se carga dinámicamente desde Firestore usando el identifier.
  *     parameters:
  *       - in: path
  *         name: identifier
  *         required: true
  *         schema:
  *           type: string
- *         description: Identificador único del webhook. Ya no es funcional pero se mantiene por compatibilidad.
+ *         description: Identificador único del webhook configurado para un cliente.
  *     requestBody:
  *       required: true
  *       content:
@@ -36,13 +35,18 @@ import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
  *               invoice:
  *                 type: object
  *                 description: El objeto de la factura a timbrar.
+ *               environment:
+ *                  type: string
+ *                  description: El ambiente a utilizar ('demo' o 'prod'). Si se omite, se usará 'demo'.
  *     responses:
  *       '200':
  *         description: Factura procesada exitosamente por HKA.
  *       '400':
  *         description: Error de validación o datos faltantes.
+ *       '404':
+ *         description: No se encontró una configuración para el identificador proporcionado.
  *       '500':
-         description: Error interno del servidor o fallo en la comunicación con HKA.
+ *         description: Error interno del servidor o fallo en la comunicación con HKA.
  */
 export async function POST(request: Request, { params }: { params: { identifier: string } }) {
   const { identifier } = params;
@@ -52,10 +56,28 @@ export async function POST(request: Request, { params }: { params: { identifier:
   const hkaResponsesRef = collection(firestore, 'hkaResponses');
   
   let submissionDocId: string | null = null;
+  let configId: string | null = null;
 
   try {
+    // Find configuration by webhook identifier
+    const configQuery = query(
+        collection(firestore, "configurations"), 
+        where("webhookIdentifier", "==", identifier), 
+        limit(1)
+    );
+    const configSnapshot = await getDocs(configQuery);
+
+    if (configSnapshot.empty) {
+        return NextResponse.json(
+            { message: `No configuration found for webhook identifier '${identifier}'.` },
+            { status: 404 }
+        );
+    }
+    configId = configSnapshot.docs[0].id;
+    
     const body = await request.json();
     const invoicePayload = body.invoice;
+    const environment = (body.environment === 'prod') ? 'prod' : 'demo';
 
     if (!invoicePayload) {
       return NextResponse.json(
@@ -69,13 +91,14 @@ export async function POST(request: Request, { params }: { params: { identifier:
       invoiceData: JSON.stringify(invoicePayload),
       status: 'pending', // Estado inicial
       hkaResponseId: null,
-      source: 'webhook'
+      source: 'webhook',
+      configId: configId,
     };
     
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
     submissionDocId = submissionDocRef.id;
 
-    const hkaResponse = await timbrar(invoicePayload);
+    const hkaResponse = await timbrar(invoicePayload, configId, environment);
     
     const hkaResponseRecord = {
       responseDate: new Date().toISOString(),

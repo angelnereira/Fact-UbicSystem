@@ -22,12 +22,17 @@
         "hkaResponseId": {
           "type": "string",
           "description": "Reference to HKAResponse. (Relationship: InvoiceSubmission 1:1 HKAResponse)"
+        },
+        "configId": {
+          "type": "string",
+          "description": "The ID of the client configuration used for this submission."
         }
       },
       "required": [
         "submissionDate",
         "invoiceData",
-        "status"
+        "status",
+        "configId"
       ]
     },
     "User": {
@@ -40,10 +45,6 @@
           "description": "The user's email address.",
           "format": "email"
         },
-        "companyName": {
-          "type": "string",
-          "description": "The name of the company the user belongs to."
-        },
         "role": {
           "type": "string",
           "description": "The role of the user in the system (e.g., 'admin', 'user').",
@@ -52,44 +53,63 @@
       },
       "required": [
         "email",
-        "companyName",
-        "role"      ]
+        "role"
+      ]
     },
     "Configuration": {
       "title": "Configuration",
       "type": "object",
-      "description": "Represents system-wide or company-specific configurations.",
+      "description": "Stores all configuration for a single HKA client, including credentials for demo and prod environments.",
       "properties": {
-        "companyId": {
-          "type": "string",
-          "description": "Unique identifier for the company this configuration applies to. If null, it's a system-wide setting."
+        "companyName": {
+            "type": "string",
+            "description": "The name of the company this configuration belongs to."
         },
-        "settingKey": {
-          "type": "string",
-          "description": "The key of the configuration setting."
-        },
-        "settingValue": {
-          "type": "string",
-          "description": "The value of the configuration setting."
+        "companyRuc": {
+            "type": "string",
+            "description": "The main RUC of the company."
         },
         "webhookIdentifier": {
             "type": "string",
             "description": "Unique URL-friendly slug for the company's webhook endpoint."
         },
-        "demoApiUrl": {
+        "demoUser": {
           "type": "string",
-          "format": "uri",
-          "description": "The base URL for the HKA demo API."
+          "description": "Username for The Factory HKA's demo environment."
         },
-        "prodApiUrl": {
-            "type": "string",
-            "format": "uri",
-            "description": "The base URL for the HKA production API."
+        "demoPass": {
+          "type": "string",
+          "description": "Password for The Factory HKA's demo environment."
+        },
+        "demoRuc": {
+          "type": "string",
+          "description": "RUC of the emitter for the demo environment."
+        },
+        "demoDv": {
+          "type": "string",
+          "description": "DV (Dígito Verificador) for the demo environment."
+        },
+        "prodUser": {
+          "type": "string",
+          "description": "Username for The Factory HKA's production environment."
+        },
+        "prodPass": {
+          "type": "string",
+          "description": "Password for The Factory HKA's production environment."
+        },
+        "prodRuc": {
+          "type": "string",
+          "description": "RUC of the emitter for the production environment."
+        },
+        "prodDv": {
+          "type": "string",
+          "description": "DV (Dígito Verificador) for the production environment."
         }
       },
       "required": [
-        "settingKey",
-        "settingValue"
+        "companyName",
+        "companyRuc",
+        "webhookIdentifier"
       ]
     },
     "HKAResponse": {
@@ -139,7 +159,7 @@
       "schema": {
         "$ref": "#/entities/Configuration"
       },
-      "description": "Stores system or company configurations."
+      "description": "Stores a complete configuration for a single client company."
     },
     "/invoiceSubmissions/{submissionId}": {
       "schema": {
