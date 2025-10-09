@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useConfigurations } from "@/hooks/use-configurations";
 
 const configSchema = z.object({
   companyName: z.string().min(1, "El nombre de la empresa es requerido."),
@@ -42,30 +43,6 @@ const newUserSchema = z.object({
 type ConfigFormValues = z.infer<typeof configSchema>;
 type NewUserFormValues = z.infer<typeof newUserSchema>;
 
-type Configuration = ConfigFormValues & { id: string };
-
-function useConfigurations() {
-    const firestore = useFirestore();
-    const [configs, setConfigs] = React.useState<Configuration[]>([]);
-    const [loading, setLoading] = React.useState(true);
-
-    const configsQuery = useMemoFirebase(
-        () => firestore ? collection(firestore, "configurations") : null,
-        [firestore]
-    );
-
-    React.useEffect(() => {
-        if (!configsQuery) return;
-        const unsubscribe = onSnapshot(configsQuery, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Configuration));
-            setConfigs(data);
-            setLoading(false);
-        });
-        return () => unsubscribe();
-    }, [configsQuery]);
-    
-    return { configs, loading };
-}
 
 export default function SettingsPage() {
   const { toast } = useToast();
