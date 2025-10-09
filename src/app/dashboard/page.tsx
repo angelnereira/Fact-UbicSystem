@@ -57,19 +57,18 @@ async function getRecentInvoices(): Promise<RecentInvoice[]> {
   }
 }
 
-export default async function DashboardPage() {
-  // Explicitly initialize firebase here to ensure env vars are loaded.
-  initializeFirebase();
-
-  let remainingFolios = 0;
-  let foliosError = false;
+async function getDashboardData() {
   try {
-    remainingFolios = await consultarFolios();
+    const remainingFolios = await consultarFolios();
+    return { remainingFolios, foliosError: false };
   } catch (error) {
     console.error("Error al consultar folios para el dashboard:", error);
-    foliosError = true;
+    return { remainingFolios: 0, foliosError: true };
   }
-  
+}
+
+export default async function DashboardPage() {
+  const { remainingFolios, foliosError } = await getDashboardData();
   const recentInvoices = await getRecentInvoices();
 
   return (
