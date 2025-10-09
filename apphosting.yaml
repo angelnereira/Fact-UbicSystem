@@ -1,3 +1,4 @@
+
 # Settings for Backend (on Cloud Run).
 # See https://firebase.google.com/docs/app-hosting/configure#cloud-run
 runConfig:
@@ -17,27 +18,42 @@ env:
       - BUILD
       - RUNTIME
 
-  # --- Server-Side Variables (Not exposed to client) ---
-  - variable: HKA_API_BASE_PROD
-    value: "https://api.hka.production.example"
-    availability:
-      - RUNTIME
-      
-  - variable: HKA_API_BASE_DEMO
-    value: "https://api.hka.demo.example"
-    availability:
-      - RUNTIME
-
   # --- Secret Variables ---
   # These are sourced from Secret Manager and are only available at runtime for security.
   # Use 'firebase apphosting:secrets:set SECRET_NAME' to create/update secrets.
 
-  - variable: HKA_API_KEY_DEMO
-    secret: HKA_API_KEY_DEMO
+  # --- Demo Environment Secrets ---
+  - variable: HKA_USER_DEMO
+    secret: HKA_USER_DEMO
+    availability:
+      - RUNTIME
+  - variable: HKA_PASS_DEMO
+    secret: HKA_PASS_DEMO
+    availability:
+      - RUNTIME
+  - variable: HKA_RUC_DEMO
+    secret: HKA_RUC_DEMO
+    availability:
+      - RUNTIME
+  - variable: HKA_DV_DEMO
+    secret: HKA_DV_DEMO
     availability:
       - RUNTIME
 
-  - variable: HKA_API_KEY_PROD
-    secret: HKA_API_KEY_PROD
+  # --- Production Environment Secrets ---
+  - variable: HKA_USER_PROD
+    secret: HKA_USER_PROD
+    availability:
+      - RUNTIME
+  - variable: HKA_PASS_PROD
+    secret: HKA_PASS_PROD
+    availability:
+      - RUNTIME
+  - variable: HKA_RUC_PROD
+    secret: HKA_RUC_PROD
+    availability:
+      - RUNTIME
+  - variable: HKA_DV_PROD
+    secret: HKA_DV_PROD
     availability:
       - RUNTIME

@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, Save, Wifi } from "lucide-react";
-import { doc, getDoc, setDoc }from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 import { PageHeader } from "@/components/page-header";
 import {
@@ -40,13 +40,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 const companySchema = z.object({
   companyName: z.string().min(3, "El nombre debe tener al menos 3 caracteres."),
   companyRuc: z.string().min(6, "El RUC debe tener al menos 6 caracteres."),
+  companyDv: z.string().min(1, "El DV es requerido.").max(2, "Máximo 2 dígitos."),
 });
 
 const hkaSchema = z.object({
-  demoApiKey: z.string().optional(),
-  demoApiUrl: z.string().url("Debe ser una URL válida.").optional(),
-  prodApiKey: z.string().optional(),
-  prodApiUrl: z.string().url("Debe ser una URL válida.").optional(),
+  demoUser: z.string().optional(),
+  demoPass: z.string().optional(),
+  prodUser: z.string().optional(),
+  prodPass: z.string().optional(),
 });
 
 type CompanyFormData = z.infer<typeof companySchema>;
@@ -85,9 +86,9 @@ function CompanyForm({ configId, initialData }: { configId: string, initialData?
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Información Fiscal</CardTitle>
+            <CardTitle>Información Fiscal del Emisor</CardTitle>
             <CardDescription>
-              Nombre y RUC de la empresa que emite las facturas.
+              Nombre, RUC y Dígito Verificador (DV) de la empresa que emite las facturas.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -104,19 +105,34 @@ function CompanyForm({ configId, initialData }: { configId: string, initialData?
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="companyRuc"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>RUC</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ej: 20123456789" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="companyRuc"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>RUC</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej: 12345678-1-123456" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="companyDv"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>DV</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ej: 90" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </CardContent>
         </Card>
         <div className="flex justify-end">
@@ -151,8 +167,10 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
       await setDoc(configRef, data, { merge: true });
       toast({
         title: "Éxito",
-        description: "Las credenciales de HKA se han guardado.",
+        description: "Las credenciales de HKA se han guardado. Por seguridad, estas se guardan en un entorno seguro y no se mostrarán aquí de nuevo.",
       });
+      // Clear password fields after submission for security
+      form.reset({ ...form.getValues(), demoPass: '', prodPass: '' });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -165,19 +183,19 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
   const handleTestConnection = async () => {
     setIsTesting(true);
     toast({ title: "Probando conexión..." });
-    // Simular una llamada a la API
+    // In a real scenario, this would trigger a server action that attempts to authenticate
     await new Promise((resolve) => setTimeout(resolve, 1500));
     const success = Math.random() > 0.3; // 70% de probabilidad de éxito
     if (success) {
       toast({
-        title: "Conexión Exitosa",
-        description: "Las credenciales son válidas y se pudo conectar a HKA.",
+        title: "Conexión Simulada Exitosa",
+        description: "Las credenciales parecen ser válidas (simulación).",
       });
     } else {
       toast({
         variant: "destructive",
-        title: "Fallo en la Conexión",
-        description: "No se pudo conectar a HKA. Verifica la URL y la API Key.",
+        title: "Fallo en la Conexión (Simulada)",
+        description: "No se pudo conectar a HKA. Verifica el usuario y la clave.",
       });
     }
     setIsTesting(false);
@@ -191,18 +209,18 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
             <CardHeader>
               <CardTitle>Ambiente de Demo</CardTitle>
               <CardDescription>
-                Credenciales para el entorno de pruebas de HKA.
+                Credenciales para el entorno de pruebas de The Factory HKA.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField
                 control={form.control}
-                name="demoApiUrl"
+                name="demoUser"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>URL Base (Demo)</FormLabel>
+                    <FormLabel>Usuario (Demo)</FormLabel>
                     <FormControl>
-                      <Input placeholder="https://api.demo.hka.com" {...field} />
+                      <Input placeholder="usuario_demo" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -210,12 +228,12 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
               />
               <FormField
                 control={form.control}
-                name="demoApiKey"
+                name="demoPass"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>API Key (Demo)</FormLabel>
+                    <FormLabel>Clave (Demo)</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="sk_test_..." {...field} />
+                      <Input type="password" placeholder="••••••••" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -228,18 +246,18 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
             <CardHeader>
               <CardTitle>Ambiente de Producción</CardTitle>
               <CardDescription>
-                Credenciales para el entorno real de HKA.
+                Credenciales para el entorno real de The Factory HKA.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                <FormField
                 control={form.control}
-                name="prodApiUrl"
+                name="prodUser"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>URL Base (Producción)</FormLabel>
+                    <FormLabel>Usuario (Producción)</FormLabel>
                     <FormControl>
-                      <Input placeholder="https://api.hka.com" {...field} />
+                      <Input placeholder="usuario_prod" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -247,12 +265,12 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
               />
               <FormField
                 control={form.control}
-                name="prodApiKey"
+                name="prodPass"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>API Key (Producción)</FormLabel>
+                    <FormLabel>Clave (Producción)</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="sk_live_..." {...field} />
+                      <Input type="password" placeholder="••••••••" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -294,12 +312,11 @@ export default function SettingsPage() {
   const [initialData, setInitialData] = React.useState<any>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
-  // Use a static ID for the configuration document, as we don't have users yet.
+  // Use a static ID for the configuration document
   const configId = "global-settings"; 
 
   React.useEffect(() => {
     if (!firestore) {
-      setIsLoading(false);
       return;
     }
     
@@ -309,7 +326,13 @@ export default function SettingsPage() {
       try {
         const docSnap = await getDoc(configRef);
         if (docSnap.exists()) {
-          setInitialData(docSnap.data());
+            const data = docSnap.data();
+            // Don't load passwords back into the form
+            setInitialData({
+                ...data,
+                demoPass: '',
+                prodPass: ''
+            });
         }
       } catch (error) {
         console.error("Error fetching configuration:", error);
@@ -358,5 +381,3 @@ export default function SettingsPage() {
     </main>
   );
 }
-
-    

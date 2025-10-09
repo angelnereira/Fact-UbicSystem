@@ -1,8 +1,9 @@
+
 import { NextResponse } from 'next/server';
 import { timbrar } from '@/lib/hka/actions';
 import { HkaError } from '@/lib/hka/types';
 import { initializeFirebase } from '@/firebase/server';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, getDoc, doc } from 'firebase/firestore';
 
 /**
  * @swagger
@@ -10,10 +11,8 @@ import { collection, addDoc } from 'firebase/firestore';
  *   post:
  *     summary: Timbra una factura manualmente desde la UI.
  *     description: |
- *       Recibe los datos de una factura desde el formulario de la aplicación,
- *       crea un registro de sumisión en Firestore y la envía a timbrar a HKA.
- *       Este endpoint no requiere un identificador de webhook, ya que usa
- *       la configuración global activa.
+ *       Recibe los datos de una factura desde el formulario, obtiene la configuración
+ *       del emisor desde Firestore, crea un registro de sumisión y la envía a timbrar a HKA.
  *     requestBody:
  *       required: true
  *       content:
@@ -28,7 +27,7 @@ import { collection, addDoc } from 'firebase/firestore';
  *       '200':
  *         description: Factura timbrada exitosamente.
  *       '400':
- *         description: Datos de la factura faltantes.
+ *         description: Datos de la factura faltantes o configuración incompleta.
  *       '500':
  *         description: Error interno o fallo en la comunicación con HKA.
  */
@@ -47,6 +46,24 @@ export async function POST(request: Request) {
       );
     }
     
+    // Obtener la configuración del emisor
+    const configRef = doc(firestore, 'configurations', 'global-settings');
+    const configSnap = await getDoc(configRef);
+
+    if (!configSnap.exists()) {
+        return NextResponse.json({ message: 'Configuración de emisor no encontrada.' }, { status: 400 });
+    }
+    const configData = configSnap.data();
+    const emisorConfig = {
+        ruc: configData.companyRuc,
+        dv: configData.companyDv,
+        name: configData.companyName
+    };
+    
+    if (!emisorConfig.ruc || !emisorConfig.dv) {
+        return NextResponse.json({ message: 'El RUC y DV del emisor no están configurados.' }, { status: 400 });
+    }
+    
     const submissionRecord = {
       submissionDate: new Date().toISOString(),
       invoiceData: JSON.stringify(invoicePayload),
@@ -57,7 +74,7 @@ export async function POST(request: Request) {
     
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
 
-    const hkaResponse = await timbrar(invoicePayload);
+    const hkaResponse = await timbrar(invoicePayload, emisorConfig);
     
     const hkaResponsesRef = collection(firestore, 'hkaResponses');
     const hkaResponseRecord = {
@@ -68,7 +85,9 @@ export async function POST(request: Request) {
     };
     const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
 
-    await submissionDocRef.update({
+    // Actualizar el documento de sumisión
+    const submissionToUpdate = doc(firestore, 'invoiceSubmissions', submissionDocRef.id);
+    await submissionToUpdate.update({
       status: 'certified',
       hkaResponseId: hkaResponseDocRef.id
     });
@@ -81,7 +100,8 @@ export async function POST(request: Request) {
     if (error instanceof HkaError) {
       return NextResponse.json(
         { 
-          message: error.body?.message || error.message,
+          message: error.message,
+          details: error.body || 'No additional details.'
         },
         { status: error.status || 500 }
       );
