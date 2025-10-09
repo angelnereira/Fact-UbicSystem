@@ -1,5 +1,3 @@
-import dotenv from "dotenv";
-dotenv.config();
 
 export const firebaseConfig = {
   "projectId": "studio-2913709404-9dd8a",
