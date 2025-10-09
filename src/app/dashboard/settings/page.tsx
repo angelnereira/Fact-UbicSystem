@@ -1,8 +1,9 @@
 
+
 "use client";
 
 import * as React from "react";
-import { Loader2, PlusCircle, Trash2, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, PlusCircle, Trash2, CheckCircle, AlertCircle, Lock, Unlock } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -77,6 +78,9 @@ export default function SettingsPage() {
   const [isValidating, setIsValidating] = React.useState(false);
   const [isCreatingUser, setIsCreatingUser] = React.useState(false);
   const [isUserDialogOpen, setIsUserDialogOpen] = React.useState(false);
+  const [isDemoLocked, setIsDemoLocked] = React.useState(true);
+  const [isProdLocked, setIsProdLocked] = React.useState(true);
+
 
   const configForm = useForm<ConfigFormValues>({
     resolver: zodResolver(configSchema),
@@ -111,6 +115,8 @@ export default function SettingsPage() {
         demoUser: "", demoPassword: "", prodUser: "", prodPassword: "",
       });
     }
+    setIsDemoLocked(true);
+    setIsProdLocked(true);
   }, [selectedConfig, configForm]);
   
   React.useEffect(() => {
@@ -137,6 +143,9 @@ export default function SettingsPage() {
         title: "Configuración Guardada",
         description: `La configuración para "${data.companyName}" ha sido guardada.`,
       });
+      setIsDemoLocked(true);
+      setIsProdLocked(true);
+
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -395,13 +404,19 @@ export default function SettingsPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={configForm.control} name="demoUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Demo)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={configForm.control} name="demoPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Demo)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={configForm.control} name="demoUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Demo)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} disabled={isDemoLocked} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={configForm.control} name="demoPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Demo)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} disabled={isDemoLocked} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
-                                <Button type="button" variant="outline" onClick={() => handleValidateCredentials('demo')} disabled={isValidating}>
-                                    {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Validar Credenciales Demo
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button type="button" variant="outline" onClick={() => handleValidateCredentials('demo')} disabled={isValidating}>
+                                        {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Validar Credenciales Demo
+                                    </Button>
+                                    <Button type="button" size="icon" variant="ghost" onClick={() => setIsDemoLocked(prev => !prev)}>
+                                        {isDemoLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                                        <span className="sr-only">{isDemoLocked ? 'Desbloquear' : 'Bloquear'}</span>
+                                    </Button>
+                                </div>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -414,13 +429,19 @@ export default function SettingsPage() {
                             </CardHeader>
                              <CardContent className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={configForm.control} name="prodUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Producción)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={configForm.control} name="prodPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Producción)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={configForm.control} name="prodUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Producción)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} disabled={isProdLocked} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={configForm.control} name="prodPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Producción)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} disabled={isProdLocked} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
-                                <Button type="button" variant="outline" onClick={() => handleValidateCredentials('prod')} disabled={isValidating}>
-                                    {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Validar Credenciales de Producción
-                                </Button>
+                                 <div className="flex items-center gap-2">
+                                    <Button type="button" variant="outline" onClick={() => handleValidateCredentials('prod')} disabled={isValidating}>
+                                        {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Validar Credenciales de Producción
+                                    </Button>
+                                    <Button type="button" size="icon" variant="ghost" onClick={() => setIsProdLocked(prev => !prev)}>
+                                        {isProdLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                                        <span className="sr-only">{isProdLocked ? 'Desbloquear' : 'Bloquear'}</span>
+                                    </Button>
+                                </div>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -461,5 +482,7 @@ export default function SettingsPage() {
     </main>
   );
 }
+
+    
 
     
