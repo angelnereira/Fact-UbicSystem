@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, Save, Wifi } from "lucide-react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc }from "firebase/firestore";
 
 import { PageHeader } from "@/components/page-header";
 import {
@@ -33,7 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, useUser } from "@/firebase";
+import { useFirestore } from "@/firebase";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // --- Zod Schemas ---
@@ -124,7 +124,7 @@ function CompanyForm({ configId, initialData }: { configId: string, initialData?
             {form.formState.isSubmitting && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            <Save className="mr-2" />
+            <Save className="mr-2 h-4 w-4" />
             Guardar Datos
           </Button>
         </div>
@@ -271,7 +271,7 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
             {isTesting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <Wifi className="mr-2" />
+              <Wifi className="mr-2 h-4 w-4" />
             )}
             Probar Conexión
           </Button>
@@ -279,7 +279,7 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
              {form.formState.isSubmitting && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            <Save className="mr-2" />
+            <Save className="mr-2 h-4 w-4" />
             Guardar Credenciales
           </Button>
         </div>
@@ -290,33 +290,36 @@ function HkaForm({ configId, initialData }: { configId: string, initialData?: Hk
 
 // --- Main Settings Page Component ---
 export default function SettingsPage() {
-  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
   const [initialData, setInitialData] = React.useState<any>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
-  // Usamos el UID del usuario para obtener una configuración única por usuario.
-  // En un sistema multi-empresa, aquí se usaría un `companyId`.
-  const configId = user?.uid; 
+  // Use a static ID for the configuration document, as we don't have users yet.
+  const configId = "global-settings"; 
 
   React.useEffect(() => {
-    if (!firestore || !configId) {
-       if (!isUserLoading) setIsLoading(false);
+    if (!firestore) {
+      setIsLoading(false);
       return;
-    };
+    }
     
     const fetchConfig = async () => {
       setIsLoading(true);
       const configRef = doc(firestore, "configurations", configId);
-      const docSnap = await getDoc(configRef);
-      if (docSnap.exists()) {
-        setInitialData(docSnap.data());
+      try {
+        const docSnap = await getDoc(configRef);
+        if (docSnap.exists()) {
+          setInitialData(docSnap.data());
+        }
+      } catch (error) {
+        console.error("Error fetching configuration:", error);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchConfig();
-  }, [firestore, configId, isUserLoading]);
+  }, [firestore]);
 
   if (isLoading) {
     return (
@@ -330,7 +333,7 @@ export default function SettingsPage() {
                 <Skeleton className="h-96 w-full" />
             </div>
        </main>
-    )
+    );
   }
 
   return (
@@ -346,22 +349,12 @@ export default function SettingsPage() {
           <TabsTrigger value="hka">Credenciales HKA</TabsTrigger>
         </TabsList>
         <TabsContent value="company" className="mt-6">
-          {configId ? (
-            <CompanyForm configId={configId} initialData={initialData} />
-           ) : (
-             <p className="text-muted-foreground">Debes iniciar sesión para configurar los datos.</p>
-           )}
+          <CompanyForm configId={configId} initialData={initialData} />
         </TabsContent>
         <TabsContent value="hka" className="mt-6">
-           {configId ? (
-            <HkaForm configId={configId} initialData={initialData} />
-           ) : (
-             <p className="text-muted-foreground">Debes iniciar sesión para configurar las credenciales.</p>
-           )}
+           <HkaForm configId={configId} initialData={initialData} />
         </TabsContent>
       </Tabs>
     </main>
   );
 }
-
-    
