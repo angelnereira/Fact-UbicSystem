@@ -2,11 +2,9 @@
 /**
  * @fileoverview
  * This module provides a client for interacting with The Factory HKA API.
- * It dynamically fetches credentials from Firestore for each request,
- * handles request retries, and provides typed functions for API operations.
+ * It reads credentials from environment variables, handles request retries,
+ * and provides typed functions for API operations.
  */
-import { initializeFirebase } from '@/firebase/server';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 // --- Types and Error Classes ---
 
@@ -39,52 +37,45 @@ interface ApiConfig {
   env: HkaEnv;
 }
 
-// --- Configuration Fetching ---
+// --- Configuration Loading from Environment Variables ---
 
 /**
- * Fetches the active HKA API configuration from Firestore using the Admin SDK.
- * @param {string} [identifier] - The unique webhook identifier slug.
+ * Gets the active HKA API configuration from environment variables.
  * @returns {Promise<ApiConfig>} The active API configuration.
+ * @throws {HkaError} If the required environment variables are not set.
  */
-async function getActiveHkaConfig(identifier?: string): Promise<ApiConfig> {
-  // Explicitly use the server-side initialization
-  const { firestore } = initializeFirebase();
-  const configCollection = collection(firestore, "configurations");
+async function getActiveHkaConfig(): Promise<ApiConfig> {
+  const env = process.env.NEXT_PUBLIC_HKA_ENV as HkaEnv;
+
+  if (env !== 'demo' && env !== 'prod') {
+    throw new HkaError({
+      message: "Configuration error: NEXT_PUBLIC_HKA_ENV must be set to 'demo' or 'prod'.",
+      status: 500,
+    });
+  }
+
+  const config: ApiConfig = {
+    env,
+    apiKey: '',
+    baseUrl: '',
+  };
+
+  if (env === 'demo') {
+    config.apiKey = process.env.HKA_API_KEY_DEMO || '';
+    config.baseUrl = process.env.NEXT_PUBLIC_HKA_API_BASE_DEMO || '';
+  } else { // prod
+    config.apiKey = process.env.HKA_API_KEY_PROD || '';
+    config.baseUrl = process.env.NEXT_PUBLIC_HKA_API_BASE_PROD || '';
+  }
+
+  if (!config.apiKey || !config.baseUrl) {
+    throw new HkaError({
+      message: `Configuration error: Missing environment variables for '${env}' environment. Please set HKA_API_KEY_${env.toUpperCase()} and NEXT_PUBLIC_HKA_API_BASE_${env.toUpperCase()}.`,
+      status: 500,
+    });
+  }
   
-  let q;
-  if (identifier) {
-    q = query(configCollection, where("webhookIdentifier", "==", identifier), limit(1));
-  } else {
-    // If no identifier, fetch any available config (for manual operations)
-    q = query(configCollection, limit(1));
-  }
-
-  const querySnapshot = await getDocs(q);
-
-  if (querySnapshot.empty) {
-    const errorMsg = identifier
-      ? `No configuration found for webhook identifier: ${identifier}`
-      : "HKA configuration not found in Firestore. Please configure it in the settings page.";
-    throw new HkaError({ message: errorMsg, status: 404 });
-  }
-  
-  const configDoc = querySnapshot.docs[0].data();
-
-  if (configDoc.demoEnabled) {
-    return {
-      apiKey: configDoc.demoTokenPassword,
-      baseUrl: configDoc.demoApiUrl || "https://api.hka.demo.example",
-      env: "demo"
-    };
-  } else if (configDoc.prodEnabled) {
-    return {
-      apiKey: configDoc.prodTokenPassword,
-      baseUrl: configDoc.prodApiUrl || "https://api.hka.production.example",
-      env: "prod"
-    };
-  } else {
-    throw new HkaError({ message: "No active HKA environment is enabled in settings.", status: 500 });
-  }
+  return config;
 }
 
 // --- Core Request Logic ---
@@ -97,10 +88,10 @@ const MAX_RETRIES = 2;
 async function request(
   path: string,
   opts: RequestInit = {},
-  identifier?: string,
   retries: number = 0
 ): Promise<any> {
-  const { apiKey, baseUrl } = await getActiveHkaConfig(identifier);
+  // Config is now fetched from environment variables inside this function.
+  const { apiKey, baseUrl } = await getActiveHkaConfig();
   
   const url = `${baseUrl}${path}`;
   const options: RequestInit = {
@@ -118,7 +109,7 @@ async function request(
       if (response.status >= 500 && retries < MAX_RETRIES) {
         console.warn(`HKA Request failed with status ${response.status}. Retrying... (Attempt ${retries + 1})`);
         await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retries)));
-        return request(path, opts, identifier, retries + 1);
+        return request(path, opts, retries + 1);
       }
 
       const errorBodyText = await response.text();
@@ -155,7 +146,7 @@ async function request(
     if (retries < MAX_RETRIES) {
       console.warn(`HKA Request failed with network error. Retrying... (Attempt ${retries + 1})`);
       await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retries)));
-      return request(path, opts, identifier, retries + 1);
+      return request(path, opts, retries + 1);
     }
     
     throw new HkaError({
@@ -190,55 +181,52 @@ export interface HkaStatus {
 
 /**
  * Stamps an invoice (timbrar).
- * @param payload The invoice data object.
- * @param identifier Optional webhook identifier. If not provided, it's a manual submission.
+ * The 'identifier' parameter is no longer used as config is derived from environment variables.
  */
-export function timbrar(payload: object, identifier?: string): Promise<HkaResponse> {
+export function timbrar(payload: object): Promise<HkaResponse> {
   const xmlBody = convertInvoiceToXml(payload);
   return request("/invoices/timbrar", {
     method: "POST",
     headers: { "Content-Type": "application/xml" },
     body: xmlBody,
-  }, identifier);
+  });
 }
 
 /**
  * Queries the status of an invoice.
  */
-export function consultarEstado(uuidOrFolio: string, identifier?: string): Promise<HkaStatus> {
-  return request(`/invoices/status/${uuidOrFolio}`, { method: "GET" }, identifier);
+export function consultarEstado(uuidOrFolio: string): Promise<HkaStatus> {
+  return request(`/invoices/status/${uuidOrFolio}`, { method: "GET" });
 }
 
 /**
  * Cancels a previously stamped invoice.
  */
-export function anular(uuidOrFolio: string, reason: string, identifier?: string): Promise<HkaResponse> {
+export function anular(uuidOrFolio: string, reason: string): Promise<HkaResponse> {
   return request(`/invoices/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: uuidOrFolio, reason }),
-  }, identifier);
+  });
 }
 
 /**
  * Consults the number of remaining folios.
  */
-export async function consultarFolios(identifier?: string): Promise<number> {
+export async function consultarFolios(): Promise<number> {
   try {
-    const response = await request("/folios", { method: "GET" }, identifier);
-    // This is a mock response because the endpoint doesn't exist.
-    // In a real scenario, you'd parse the actual response.
+    const response = await request("/folios", { method: "GET" });
     if (typeof response?.remaining_folios === "number") {
       return response.remaining_folios;
     }
     // Return a mock value if the API doesn't provide the expected field.
     return 100;
   } catch (error) {
-     if (error instanceof HkaError && (error.status === 404 || error.message.includes("No active HKA environment") || error.message.includes("HKA configuration not found in Firestore"))) {
-        console.warn("HKA environment not configured or not found. Returning 0 folios.");
-        throw error; // Re-throw to let the UI know about the configuration issue
+     if (error instanceof HkaError) {
+        // Let the calling UI component handle configuration errors.
+        console.error("Failed to fetch folios due to HKA client error:", error.message);
+        throw error;
      }
-     // For any other error during development/testing, re-throw to be caught by the calling component.
      console.error("Failed to fetch folios.", error);
      throw error;
   }

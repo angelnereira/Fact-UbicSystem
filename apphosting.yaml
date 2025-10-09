@@ -2,22 +2,43 @@
 # See https://firebase.google.com/docs/app-hosting/configure#cloud-run
 runConfig:
   minInstances: 0
-  # maxInstances: 100
-  # concurrency: 80
-  # cpu: 1
-  # memoryMiB: 512
+  maxInstances: 10
+  cpu: 1
+  memoryMiB: 512
 
-# Environment variables and secrets.
-# env:
-  # Configure environment variables.
-  # See https://firebase.google.com/docs/app-hosting/configure#user-defined-environment
-  # - variable: MESSAGE
-  #   value: Hello world!
-  #   availability:
-  #     - BUILD
-  #     - RUNTIME
+# Environment variables and secrets for the backend.
+# See https://firebase.google.com/docs/app-hosting/configure
+env:
+  # --- Public Variables ---
+  # These are available during both build and runtime.
+  - variable: NEXT_PUBLIC_HKA_ENV
+    value: "demo" # Can be 'demo' or 'prod'
+    availability:
+      - BUILD
+      - RUNTIME
 
-  # Grant access to secrets in Cloud Secret Manager.
-  # See https://firebase.google.com/docs/app-hosting/configure#secret-parameters
-  # - variable: MY_SECRET
-  #   secret: mySecretRef
+  - variable: NEXT_PUBLIC_HKA_API_BASE_PROD
+    value: "https://api.hka.production.example"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_HKA_API_BASE_DEMO
+    value: "https://api.hka.demo.example"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # --- Secret Variables ---
+  # These are sourced from Secret Manager and are only available at runtime for security.
+  # Use 'firebase apphosting:secrets:set SECRET_NAME' to create/update secrets.
+
+  - variable: HKA_API_KEY_DEMO
+    secret: HKA_API_KEY_DEMO
+    availability:
+      - RUNTIME
+
+  - variable: HKA_API_KEY_PROD
+    secret: HKA_API_KEY_PROD
+    availability:
+      - RUNTIME

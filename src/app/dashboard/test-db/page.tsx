@@ -16,18 +16,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function TestDbPage() {
   const firestore = useFirestore();
 
-  const configQuery = useMemoFirebase(
+  const submissionsQuery = useMemoFirebase(
     () =>
       firestore
-        ? query(collection(firestore, "configurations"), limit(1))
+        ? query(collection(firestore, "invoiceSubmissions"), limit(1))
         : null,
     [firestore]
   );
   
-  const { data: configData, isLoading, error } = useCollection(configQuery);
+  const { data: submissionsData, isLoading, error } = useCollection(submissionsQuery);
 
   const dbError = error;
-  const dbResult = configData?.[0];
+  const dbResult = submissionsData?.[0];
 
   const renderContent = () => {
     if (isLoading) {
@@ -77,17 +77,17 @@ export default function TestDbPage() {
           <div className="flex-1">
             <CardTitle className="text-green-600">Conexión Exitosa con Firestore</CardTitle>
             <CardDescription>
-              Conectado exitosamente a Firestore y configuración obtenida.
+              Conectado exitosamente a Firestore. Se probó leyendo la colección 'invoiceSubmissions'.
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
           <p className="mb-2 text-sm font-medium">
-            Datos de la colección `configurations`:
+            Último envío de factura encontrado:
           </p>
           <div className="rounded-md bg-muted p-4">
-            <pre className="text-sm text-foreground">
-              <code>{JSON.stringify(dbResult, null, 2) || "No se encontró documento de configuración."}</code>
+            <pre className="text-sm text-foreground overflow-auto">
+              <code>{JSON.stringify(dbResult, null, 2) || "No se encontraron documentos en 'invoiceSubmissions'."}</code>
             </pre>
           </div>
         </CardContent>

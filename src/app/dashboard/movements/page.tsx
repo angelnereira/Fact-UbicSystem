@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -80,17 +79,13 @@ const statusBadgeStyles: { [key: string]: string } = {
 
 const mockApiHealth = {
   connectionStatus: "success",
-  activeEnvironment: "demo",
+  activeEnvironment: process.env.NEXT_PUBLIC_HKA_ENV || "desconocido",
   latency: 0,
   errorRate: 0,
 };
 
 export default function MovementsPage() {
   const { toast } = useToast();
-  const [webhookIdentifier, setWebhookIdentifier] = useState('');
-  const [isSavingIdentifier, setIsSavingIdentifier] = useState(false);
-  const [isLoadingIdentifier, setIsLoadingIdentifier] = useState(true);
-  const [configId, setConfigId] = useState<string | null>(null);
   
   // State for filters
   const [filterText, setFilterText] = useState('');
@@ -99,40 +94,7 @@ export default function MovementsPage() {
 
   const firestore = useFirestore();
 
-  useEffect(() => {
-    async function fetchConfig() {
-      if (!firestore) return;
-      setIsLoadingIdentifier(true);
-      const configCollection = collection(firestore, "configurations");
-      const q = query(configCollection, limit(1));
-      try {
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const configDoc = querySnapshot.docs[0];
-          setWebhookIdentifier(configDoc.data().webhookIdentifier || '');
-          setConfigId(configDoc.id);
-        } else {
-          setWebhookIdentifier('');
-          setConfigId(null);
-        }
-      } catch (error) {
-        console.error("Error fetching configuration:", error);
-        toast({
-          variant: "destructive",
-          title: "Error de Configuración",
-          description: "No se pudo cargar la configuración del webhook."
-        });
-      } finally {
-        setIsLoadingIdentifier(false);
-      }
-    }
-    fetchConfig();
-  }, [firestore, toast]);
-
-
-  const fullWebhookUrl = webhookIdentifier
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/invoices/${webhookIdentifier}`
-    : "Aún no configurado.";
+  const fullWebhookUrl = "La URL del Webhook ahora se configura en el sistema que llama a la API.";
 
   const submissionsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -184,19 +146,7 @@ export default function MovementsPage() {
 
 
   const copyToClipboard = async () => {
-    if (!fullWebhookUrl.startsWith("http")) return;
-
-    try {
-      await navigator.clipboard.writeText(fullWebhookUrl);
-      toast({ title: "¡Copiado!", description: "URL del webhook copiada al portapapeles." });
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Copia Fallida",
-        description: "No se pudo copiar la URL. Es posible que tu navegador no lo permita en este contexto.",
-      });
-      console.error('Failed to copy: ', err);
-    }
+    toast({ title: "Información", description: fullWebhookUrl });
   };
 
   const renderTableContent = () => {
@@ -235,7 +185,7 @@ export default function MovementsPage() {
             {new Date(mov.submissionDate).toLocaleString()}
           </TableCell>
           <TableCell>
-            <Badge variant="outline">Timbrar (Webhook)</Badge>
+            <Badge variant="outline">Timbrar</Badge>
           </TableCell>
           <TableCell>
             <Badge
@@ -267,7 +217,7 @@ export default function MovementsPage() {
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
       <PageHeader
         title="Movimientos de Integración"
-        description="Supervisa la salud y configura las fuentes de datos."
+        description="Supervisa la salud y la actividad de la integración con HKA."
       />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

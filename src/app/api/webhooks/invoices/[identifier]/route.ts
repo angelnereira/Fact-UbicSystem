@@ -1,4 +1,5 @@
 
+
 import { NextResponse } from 'next/server';
 import { timbrar, HkaError } from '@/lib/hka/client';
 import { initializeFirebase } from '@/firebase/server';
@@ -15,13 +16,15 @@ import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
  *       cuando se necesita procesar y timbrar una nueva factura. El `identifier` en la URL es un slug
  *       único configurado por el usuario para identificar su empresa. El payload debe contener la
  *       información de la factura.
+ *       NOTA: Con la nueva arquitectura, el `identifier` ya no se usa para buscar credenciales en BD,
+ *       pero se mantiene por compatibilidad. La configuración se carga desde variables de entorno.
  *     parameters:
  *       - in: path
  *         name: identifier
  *         required: true
  *         schema:
  *           type: string
- *         description: El identificador único del webhook configurado por el usuario.
+ *         description: Identificador único del webhook. Ya no es funcional pero se mantiene por compatibilidad.
  *     requestBody:
  *       required: true
  *       content:
@@ -37,10 +40,8 @@ import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
  *         description: Factura procesada exitosamente por HKA.
  *       '400':
  *         description: Error de validación o datos faltantes.
- *       '404':
- *         description: No se encontró una configuración para el identificador proporcionado.
  *       '500':
- *         description: Error interno del servidor o fallo en la comunicación con HKA.
+         description: Error interno del servidor o fallo en la comunicación con HKA.
  */
 export async function POST(request: Request, { params }: { params: { identifier: string } }) {
   const { identifier } = params;
@@ -68,13 +69,14 @@ export async function POST(request: Request, { params }: { params: { identifier:
       invoiceData: JSON.stringify(invoicePayload),
       status: 'pending', // Estado inicial
       hkaResponseId: null,
+      source: 'webhook'
     };
     
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
     submissionDocId = submissionDocRef.id;
 
-    // 2. Intentar timbrar la factura (ahora usa credenciales dinámicas basadas en el identifier)
-    const hkaResponse = await timbrar(invoicePayload, identifier);
+    // 2. Intentar timbrar la factura (ahora usa credenciales del entorno)
+    const hkaResponse = await timbrar(invoicePayload);
     
     // 3. Guardar la respuesta de HKA
     const hkaResponseRecord = {
@@ -127,10 +129,6 @@ export async function POST(request: Request, { params }: { params: { identifier:
         } catch (updateError) {
             console.error("Error al actualizar el estado de la sumisión:", updateError);
         }
-    }
-
-    if (error.message.includes("No configuration found for webhook identifier")) {
-        return NextResponse.json({ message: error.message }, { status: 404 });
     }
 
     if (error instanceof HkaError) {
