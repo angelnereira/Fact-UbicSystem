@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -6,22 +7,25 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc } from "firebase/firestore";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, useMemoFirebase } from "@/firebase";
+import { useFirestore, useMemoFirebase, useAuth } from "@/firebase";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const configSchema = z.object({
   companyName: z.string().min(1, "El nombre de la empresa es requerido."),
   companyRuc: z.string().min(1, "El RUC de la empresa es requerido."),
+  dv: z.string().min(1, "El DV es requerido."),
   webhookIdentifier: z.string().min(3, "El identificador debe tener al menos 3 caracteres.").regex(/^[a-z0-9-]+$/, "Solo minúsculas, números y guiones."),
   demoUser: z.string().optional(),
   demoPassword: z.string().optional(),
@@ -29,7 +33,14 @@ const configSchema = z.object({
   prodPassword: z.string().optional(),
 });
 
+const newUserSchema = z.object({
+  username: z.string().min(2, "El nombre de usuario es requerido."),
+  email: z.string().email("El correo no es válido."),
+  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres."),
+});
+
 type ConfigFormValues = z.infer<typeof configSchema>;
+type NewUserFormValues = z.infer<typeof newUserSchema>;
 
 type Configuration = ConfigFormValues & { id: string };
 
@@ -59,19 +70,33 @@ function useConfigurations() {
 export default function SettingsPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
+  const auth = useAuth();
   const { configs, loading: loadingConfigs } = useConfigurations();
   const [selectedConfigId, setSelectedConfigId] = React.useState<string | undefined>();
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [isValidating, setIsValidating] = React.useState(false);
+  const [isCreatingUser, setIsCreatingUser] = React.useState(false);
+  const [isUserDialogOpen, setIsUserDialogOpen] = React.useState(false);
 
-  const form = useForm<ConfigFormValues>({
+  const configForm = useForm<ConfigFormValues>({
     resolver: zodResolver(configSchema),
     defaultValues: {
       companyName: "",
       companyRuc: "",
+      dv: "",
       webhookIdentifier: "",
     }
   });
+
+  const newUserForm = useForm<NewUserFormValues>({
+    resolver: zodResolver(newUserSchema),
+    defaultValues: {
+      username: "",
+      email: "",
+      password: "",
+    }
+  });
+
 
   const selectedConfig = React.useMemo(() => {
     return configs.find(c => c.id === selectedConfigId);
@@ -79,14 +104,14 @@ export default function SettingsPage() {
 
   React.useEffect(() => {
     if (selectedConfig) {
-      form.reset(selectedConfig);
+      configForm.reset(selectedConfig);
     } else {
-      form.reset({
-        companyName: "", companyRuc: "", webhookIdentifier: "",
+      configForm.reset({
+        companyName: "", companyRuc: "", dv: "", webhookIdentifier: "",
         demoUser: "", demoPassword: "", prodUser: "", prodPassword: "",
       });
     }
-  }, [selectedConfig, form]);
+  }, [selectedConfig, configForm]);
   
   React.useEffect(() => {
     if(!selectedConfigId && configs.length > 0) {
@@ -94,7 +119,7 @@ export default function SettingsPage() {
     }
   }, [configs, selectedConfigId]);
 
-  async function onSubmit(data: ConfigFormValues) {
+  async function onConfigSubmit(data: ConfigFormValues) {
     if (!firestore) return;
 
     try {
@@ -121,6 +146,39 @@ export default function SettingsPage() {
     }
   }
 
+  async function onNewUserSubmit(data: NewUserFormValues) {
+    if (!auth || !firestore) return;
+    setIsCreatingUser(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const user = userCredential.user;
+
+      // Create user profile in Firestore
+      await setDoc(doc(firestore, "users", user.uid), {
+        email: user.email,
+        name: data.username,
+        role: "admin", // Default role
+      });
+
+      toast({
+        title: "Usuario Creado",
+        description: `El usuario ${data.username} ha sido creado exitosamente.`,
+      });
+      newUserForm.reset();
+      setIsUserDialogOpen(false);
+
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error al Crear Usuario",
+        description: error.message || "No se pudo completar el registro.",
+      });
+    } finally {
+      setIsCreatingUser(false);
+    }
+  }
+
+
   async function handleDelete() {
     if (!firestore || !selectedConfigId) return;
     setIsDeleting(true);
@@ -143,7 +201,7 @@ export default function SettingsPage() {
   }
 
   async function handleValidateCredentials(environment: 'demo' | 'prod') {
-      const values = form.getValues();
+      const values = configForm.getValues();
       const credentials = {
         usuario: environment === 'demo' ? values.demoUser : values.prodUser,
         clave: environment === 'demo' ? values.demoPassword : values.prodPassword,
@@ -187,7 +245,7 @@ export default function SettingsPage() {
 
   const handleCreateNew = () => {
     setSelectedConfigId(undefined);
-    form.reset({ companyName: "", companyRuc: "", webhookIdentifier: "" });
+    configForm.reset({ companyName: "", companyRuc: "", dv: "", webhookIdentifier: "" });
   }
 
   const webhookUrl = selectedConfig?.webhookIdentifier 
@@ -209,7 +267,51 @@ export default function SettingsPage() {
                       Elige una configuración de cliente para ver, editar, o crea una nueva.
                   </CardDescription>
               </div>
-              <Button variant="outline" onClick={handleCreateNew}><PlusCircle className="mr-2"/> Crear Nuevo Cliente</Button>
+              <div className="flex items-center gap-2">
+                 <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
+                    <DialogTrigger asChild>
+                       <Button variant="outline"><PlusCircle className="mr-2"/> Crear Nuevo Usuario</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Registrar Nuevo Usuario Administrador</DialogTitle>
+                            <DialogDescription>
+                                Completa los datos para crear un nuevo usuario con acceso al sistema.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Form {...newUserForm}>
+                            <form onSubmit={newUserForm.handleSubmit(onNewUserSubmit)} className="space-y-4">
+                               <FormField control={newUserForm.control} name="username" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Nombre de Usuario</FormLabel>
+                                        <FormControl><Input placeholder="Ej: Juan Pérez" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}/>
+                                <FormField control={newUserForm.control} name="email" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Correo Electrónico</FormLabel>
+                                        <FormControl><Input type="email" placeholder="ejemplo@correo.com" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}/>
+                                <FormField control={newUserForm.control} name="password" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Contraseña</FormLabel>
+                                        <FormControl><Input type="password" {...field} /></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}/>
+                                <Button type="submit" disabled={isCreatingUser}>
+                                    {isCreatingUser && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Crear Usuario
+                                </Button>
+                            </form>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+                <Button onClick={handleCreateNew}><PlusCircle className="mr-2"/> Crear Nuevo Cliente HKA</Button>
+              </div>
           </CardHeader>
           <CardContent>
             {loadingConfigs ? <Skeleton className="h-10 w-full" /> : (
@@ -230,8 +332,8 @@ export default function SettingsPage() {
       </Card>
       
       {(selectedConfigId !== undefined || configs.length === 0) && (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Form {...configForm}>
+            <form onSubmit={configForm.handleSubmit(onConfigSubmit)} className="space-y-6">
                 <Tabs defaultValue="company">
                     <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="company">Datos de Empresa</TabsTrigger>
@@ -246,21 +348,30 @@ export default function SettingsPage() {
                                 <CardDescription>Datos principales de la empresa y endpoint del webhook.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <FormField control={form.control} name="companyName" render={({ field }) => (
+                                <FormField control={configForm.control} name="companyName" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Nombre de la Empresa</FormLabel>
                                         <FormControl><Input placeholder="Mi Empresa S.A." {...field} /></FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}/>
-                                <FormField control={form.control} name="companyRuc" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>RUC de la Empresa</FormLabel>
-                                        <FormControl><Input placeholder="1234567-1-123456" {...field} /></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}/>
-                                <FormField control={form.control} name="webhookIdentifier" render={({ field }) => (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <FormField control={configForm.control} name="companyRuc" render={({ field }) => (
+                                        <FormItem className="col-span-2">
+                                            <FormLabel>RUC de la Empresa</FormLabel>
+                                            <FormControl><Input placeholder="1234567-1-123456" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                    <FormField control={configForm.control} name="dv" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>DV</FormLabel>
+                                            <FormControl><Input placeholder="90" {...field} /></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                </div>
+                                <FormField control={configForm.control} name="webhookIdentifier" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Identificador para Webhook</FormLabel>
                                         <FormControl><Input placeholder="mi-empresa-slug" {...field} /></FormControl>
@@ -284,8 +395,8 @@ export default function SettingsPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="demoUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Demo)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="demoPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Demo)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={configForm.control} name="demoUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Demo)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={configForm.control} name="demoPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Demo)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 <Button type="button" variant="outline" onClick={() => handleValidateCredentials('demo')} disabled={isValidating}>
                                     {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -303,8 +414,8 @@ export default function SettingsPage() {
                             </CardHeader>
                              <CardContent className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="prodUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Producción)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                    <FormField control={form.control} name="prodPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Producción)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={configForm.control} name="prodUser" render={({ field }) => (<FormItem><FormLabel>Usuario (Producción)</FormLabel><FormControl><Input placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                    <FormField control={configForm.control} name="prodPassword" render={({ field }) => (<FormItem><FormLabel>Clave (Producción)</FormLabel><FormControl><Input type="password" placeholder="proporcionado por HKA" {...field} /></FormControl><FormMessage /></FormItem>)}/>
                                 </div>
                                 <Button type="button" variant="outline" onClick={() => handleValidateCredentials('prod')} disabled={isValidating}>
                                     {isValidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -339,8 +450,8 @@ export default function SettingsPage() {
                            </AlertDialog>
                         )}
                     </div>
-                    <Button type="submit" disabled={form.formState.isSubmitting}>
-                        {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Button type="submit" disabled={configForm.formState.isSubmitting}>
+                        {configForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {selectedConfigId ? 'Guardar Cambios' : 'Crear Configuración'}
                     </Button>
                 </div>
@@ -350,3 +461,5 @@ export default function SettingsPage() {
     </main>
   );
 }
+
+    
