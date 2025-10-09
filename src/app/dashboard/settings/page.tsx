@@ -20,26 +20,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Zod Schema for the configuration form
 const configSchema = z.object({
   companyName: z.string().min(1, "El nombre de la empresa es requerido."),
   companyRuc: z.string().min(1, "El RUC de la empresa es requerido."),
   webhookIdentifier: z.string().min(3, "El identificador debe tener al menos 3 caracteres.").regex(/^[a-z0-9-]+$/, "Solo minúsculas, números y guiones."),
-  demoUser: z.string().optional(),
-  demoPass: z.string().optional(),
-  demoRuc: z.string().optional(),
-  demoDv: z.string().optional(),
-  prodUser: z.string().optional(),
-  prodPass: z.string().optional(),
-  prodRuc: z.string().optional(),
-  prodDv: z.string().optional(),
+  demoApiKey: z.string().optional(),
+  demoApiSecret: z.string().optional(),
+  prodApiKey: z.string().optional(),
+  prodApiSecret: z.string().optional(),
 });
 
 type ConfigFormValues = z.infer<typeof configSchema>;
 
 type Configuration = ConfigFormValues & { id: string };
 
-// --- Custom hook to get configurations ---
 function useConfigurations() {
     const firestore = useFirestore();
     const [configs, setConfigs] = React.useState<Configuration[]>([]);
@@ -63,8 +57,6 @@ function useConfigurations() {
     return { configs, loading };
 }
 
-
-// --- Main Settings Page Component ---
 export default function SettingsPage() {
   const { toast } = useToast();
   const firestore = useFirestore();
@@ -93,8 +85,8 @@ export default function SettingsPage() {
         companyName: "",
         companyRuc: "",
         webhookIdentifier: "",
-        demoUser: "", demoPass: "", demoRuc: "", demoDv: "",
-        prodUser: "", prodPass: "", prodRuc: "", prodDv: "",
+        demoApiKey: "", demoApiSecret: "",
+        prodApiKey: "", prodApiSecret: "",
       });
     }
   }, [selectedConfig, form]);
@@ -105,18 +97,15 @@ export default function SettingsPage() {
     }
   }, [configs, selectedConfigId]);
 
-
   async function onSubmit(data: ConfigFormValues) {
     if (!firestore) return;
 
     try {
         let docId = selectedConfigId;
         if (docId) {
-            // Update existing document
             const configRef = doc(firestore, "configurations", docId);
             await setDoc(configRef, data, { merge: true });
         } else {
-            // Create new document
             const newDocRef = await addDoc(collection(firestore, "configurations"), data);
             setSelectedConfigId(newDocRef.id);
             docId = newDocRef.id;
@@ -168,19 +157,19 @@ export default function SettingsPage() {
   return (
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
       <PageHeader
-        title="Gestión de Configuraciones"
+        title="Gestión de Clientes HKA"
         description="Crea, edita y gestiona las configuraciones para cada cliente de HKA."
       />
       
        <Card>
           <CardHeader className="flex-row items-center justify-between">
               <div className="space-y-1.5">
-                  <CardTitle>Seleccionar Configuración</CardTitle>
+                  <CardTitle>Seleccionar Cliente</CardTitle>
                   <CardDescription>
-                      Elige una configuración para ver o editar, o crea una nueva.
+                      Elige una configuración de cliente para ver o editar, o crea una nueva.
                   </CardDescription>
               </div>
-              <Button variant="outline" onClick={handleCreateNew}><PlusCircle className="mr-2"/> Crear Nueva</Button>
+              <Button variant="outline" onClick={handleCreateNew}><PlusCircle className="mr-2"/> Crear Nuevo Cliente</Button>
           </CardHeader>
           <CardContent>
             {loadingConfigs ? <Skeleton className="h-10 w-full" /> : (
@@ -200,7 +189,7 @@ export default function SettingsPage() {
           </CardContent>
       </Card>
       
-      {(selectedConfigId || !selectedConfigId) && (
+      {(selectedConfigId !== undefined || configs.length === 0) && (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <Tabs defaultValue="company">
@@ -213,7 +202,7 @@ export default function SettingsPage() {
                     <TabsContent value="company">
                         <Card>
                             <CardHeader>
-                                <CardTitle>Información General</CardTitle>
+                                <CardTitle>Información General del Cliente</CardTitle>
                                 <CardDescription>Datos principales de la empresa y endpoint del webhook.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
@@ -251,13 +240,11 @@ export default function SettingsPage() {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Credenciales de Ambiente Demo</CardTitle>
-                                <CardDescription>Credenciales proporcionadas por The Factory HKA para el entorno de pruebas.</CardDescription>
+                                <CardDescription>Credenciales API REST para el entorno de pruebas.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField control={form.control} name="demoUser" render={({ field }) => (<FormItem><FormLabel>Usuario Demo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                <FormField control={form.control} name="demoPass" render={({ field }) => (<FormItem><FormLabel>Clave Demo</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                <FormField control={form.control} name="demoRuc" render={({ field }) => (<FormItem><FormLabel>RUC Emisor Demo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                <FormField control={form.control} name="demoDv" render={({ field }) => (<FormItem><FormLabel>DV Emisor Demo</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                <FormField control={form.control} name="demoApiKey" render={({ field }) => (<FormItem><FormLabel>API Key (Demo)</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                <FormField control={form.control} name="demoApiSecret" render={({ field }) => (<FormItem><FormLabel>API Secret (Demo)</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -266,13 +253,11 @@ export default function SettingsPage() {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Credenciales de Ambiente de Producción</CardTitle>
-                                <CardDescription>Credenciales proporcionadas por The Factory HKA para el entorno productivo. ¡Manejar con cuidado!</CardDescription>
+                                <CardDescription>Credenciales API REST para el entorno productivo. ¡Manejar con cuidado!</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField control={form.control} name="prodUser" render={({ field }) => (<FormItem><FormLabel>Usuario Producción</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                <FormField control={form.control} name="prodPass" render={({ field }) => (<FormItem><FormLabel>Clave Producción</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                <FormField control={form.control} name="prodRuc" render={({ field }) => (<FormItem><FormLabel>RUC Emisor Producción</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
-                                <FormField control={form.control} name="prodDv" render={({ field }) => (<FormItem><FormLabel>DV Emisor Producción</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                <FormField control={form.control} name="prodApiKey" render={({ field }) => (<FormItem><FormLabel>API Key (Producción)</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+                                <FormField control={form.control} name="prodApiSecret" render={({ field }) => (<FormItem><FormLabel>API Secret (Producción)</FormLabel><FormControl><Input type="password" {...field} /></FormControl><FormMessage /></FormItem>)}/>
                             </CardContent>
                         </Card>
                     </TabsContent>

@@ -73,37 +73,21 @@
             "type": "string",
             "description": "Unique URL-friendly slug for the company's webhook endpoint."
         },
-        "demoUser": {
+        "demoApiKey": {
           "type": "string",
-          "description": "Username for The Factory HKA's demo environment."
+          "description": "API Key for The Factory HKA's demo environment."
         },
-        "demoPass": {
+        "demoApiSecret": {
           "type": "string",
-          "description": "Password for The Factory HKA's demo environment."
+          "description": "API Secret for The Factory HKA's demo environment."
         },
-        "demoRuc": {
+        "prodApiKey": {
           "type": "string",
-          "description": "RUC of the emitter for the demo environment."
+          "description": "API Key for The Factory HKA's production environment."
         },
-        "demoDv": {
+        "prodApiSecret": {
           "type": "string",
-          "description": "DV (Dígito Verificador) for the demo environment."
-        },
-        "prodUser": {
-          "type": "string",
-          "description": "Username for The Factory HKA's production environment."
-        },
-        "prodPass": {
-          "type": "string",
-          "description": "Password for The Factory HKA's production environment."
-        },
-        "prodRuc": {
-          "type": "string",
-          "description": "RUC of the emitter for the production environment."
-        },
-        "prodDv": {
-          "type": "string",
-          "description": "DV (Dígito Verificador) for the production environment."
+          "description": "API Secret for The Factory HKA's production environment."
         }
       },
       "required": [
