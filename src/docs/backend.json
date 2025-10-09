@@ -1,0 +1,161 @@
+
+{
+  "entities": {
+    "InvoiceSubmission": {
+      "title": "InvoiceSubmission",
+      "type": "object",
+      "description": "Represents an invoice submission received via webhook.",
+      "properties": {
+        "submissionDate": {
+          "type": "string",
+          "description": "The date and time the invoice was submitted.",
+          "format": "date-time"
+        },
+        "invoiceData": {
+          "type": "string",
+          "description": "JSON string of the invoice data submitted."
+        },
+        "status": {
+          "type": "string",
+          "description": "The processing status of the invoice (e.g., 'pending', 'certified', 'failed')."
+        },
+        "hkaResponseId": {
+          "type": "string",
+          "description": "Reference to HKAResponse. (Relationship: InvoiceSubmission 1:1 HKAResponse)"
+        },
+        "configId": {
+          "type": "string",
+          "description": "The ID of the client configuration used for this submission."
+        }
+      },
+      "required": [
+        "submissionDate",
+        "invoiceData",
+        "status",
+        "configId"
+      ]
+    },
+    "User": {
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the e-Factura Bridge system.",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "The user's email address.",
+          "format": "email"
+        },
+        "role": {
+          "type": "string",
+          "description": "The role of the user in the system (e.g., 'admin', 'user').",
+          "enum": ["admin", "user"]
+        }
+      },
+      "required": [
+        "email",
+        "role"
+      ]
+    },
+    "Configuration": {
+      "title": "Configuration",
+      "type": "object",
+      "description": "Stores all configuration for a single HKA client, including credentials for demo and prod environments.",
+      "properties": {
+        "companyName": {
+            "type": "string",
+            "description": "The name of the company this configuration belongs to."
+        },
+        "companyRuc": {
+            "type": "string",
+            "description": "The main RUC of the company."
+        },
+        "webhookIdentifier": {
+            "type": "string",
+            "description": "Unique URL-friendly slug for the company's webhook endpoint."
+        },
+        "demoUser": {
+          "type": "string",
+          "description": "User for The Factory HKA's demo environment."
+        },
+        "demoPassword": {
+          "type": "string",
+          "description": "Password for The Factory HKA's demo environment."
+        },
+        "prodUser": {
+          "type": "string",
+          "description": "User for The Factory HKA's production environment."
+        },
+        "prodPassword": {
+          "type": "string",
+          "description": "Password for The Factory HKA's production environment."
+        }
+      },
+      "required": [
+        "companyName",
+        "companyRuc",
+        "webhookIdentifier"
+      ]
+    },
+    "HKAResponse": {
+      "title": "HKAResponse",
+      "type": "object",
+      "description": "Represents a response received from the HKA (The Factory HKA) service.",
+      "properties": {
+        "responseDate": {
+          "type": "string",
+          "description": "The date and time the response was received.",
+          "format": "date-time"
+        },
+        "statusCode": {
+          "type": "number",
+          "description": "The HTTP status code of the response."
+        },
+        "responseBody": {
+          "type": "string",
+          "description": "The raw response body from the HKA."
+        },
+        "invoiceSubmissionId": {
+          "type": "string",
+          "description": "Reference to InvoiceSubmission. (Relationship: InvoiceSubmission 1:1 HKAResponse)"
+        }
+      },
+      "required": [
+        "responseDate",
+        "statusCode",
+        "responseBody"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores user profiles."
+    },
+    "/configurations/{configId}": {
+      "schema": {
+        "$ref": "#/entities/Configuration"
+      },
+      "description": "Stores a complete configuration for a single client company."
+    },
+    "/invoiceSubmissions/{submissionId}": {
+      "schema": {
+        "$ref": "#/entities/InvoiceSubmission"
+      },
+      "description": "Logs all incoming invoice submissions from webhooks."
+    },
+    "/hkaResponses/{responseId}": {
+      "schema": {
+        "$ref": "#/entities/HKAResponse"
+      },
+      "description": "Logs all responses from the HKA API."
+    }
+  }
+}

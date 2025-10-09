@@ -3,11 +3,11 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, PlusCircle, Trash2, CheckCircle, AlertCircle, Lock, Unlock } from "lucide-react";
+import { Loader2, PlusCircle, Trash2, CheckCircle, AlertCircle, Lock, Unlock, Copy } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 
 import { PageHeader } from "@/components/page-header";
@@ -26,7 +26,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 const configSchema = z.object({
   companyName: z.string().min(1, "El nombre de la empresa es requerido."),
   companyRuc: z.string().min(1, "El RUC de la empresa es requerido."),
-  dv: z.string().min(1, "El DV es requerido."),
   webhookIdentifier: z.string().min(3, "El identificador debe tener al menos 3 caracteres.").regex(/^[a-z0-9-]+$/, "Solo minúsculas, números y guiones."),
   demoUser: z.string().optional(),
   demoPassword: z.string().optional(),
@@ -87,7 +86,6 @@ export default function SettingsPage() {
     defaultValues: {
       companyName: "",
       companyRuc: "",
-      dv: "",
       webhookIdentifier: "",
     }
   });
@@ -111,7 +109,7 @@ export default function SettingsPage() {
       configForm.reset(selectedConfig);
     } else {
       configForm.reset({
-        companyName: "", companyRuc: "", dv: "", webhookIdentifier: "",
+        companyName: "", companyRuc: "", webhookIdentifier: "",
         demoUser: "", demoPassword: "", prodUser: "", prodPassword: "",
       });
     }
@@ -129,6 +127,20 @@ export default function SettingsPage() {
     if (!firestore) return;
 
     try {
+        // Check for unique webhook identifier
+        const q = query(collection(firestore, "configurations"), where("webhookIdentifier", "==", data.webhookIdentifier));
+        const querySnapshot = await getDocs(q);
+        const isDuplicate = !querySnapshot.empty && querySnapshot.docs[0].id !== selectedConfigId;
+
+        if (isDuplicate) {
+            toast({
+                variant: "destructive",
+                title: "Identificador Duplicado",
+                description: "Este identificador de webhook ya está en uso por otro cliente.",
+            });
+            return;
+        }
+
         let docId = selectedConfigId;
         if (docId) {
             const configRef = doc(firestore, "configurations", docId);
@@ -254,12 +266,19 @@ export default function SettingsPage() {
 
   const handleCreateNew = () => {
     setSelectedConfigId(undefined);
-    configForm.reset({ companyName: "", companyRuc: "", dv: "", webhookIdentifier: "" });
+    configForm.reset({ companyName: "", companyRuc: "", webhookIdentifier: "" });
   }
 
   const webhookUrl = selectedConfig?.webhookIdentifier 
     ? `${window.location.origin}/api/webhooks/invoices/${selectedConfig.webhookIdentifier}`
     : null;
+    
+  const copyWebhookUrl = () => {
+    if (webhookUrl) {
+      navigator.clipboard.writeText(webhookUrl);
+      toast({ title: "Copiado", description: "URL del webhook copiada al portapapeles." });
+    }
+  }
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
@@ -364,34 +383,35 @@ export default function SettingsPage() {
                                         <FormMessage />
                                     </FormItem>
                                 )}/>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <FormField control={configForm.control} name="companyRuc" render={({ field }) => (
-                                        <FormItem className="col-span-2">
+                                 <FormField control={configForm.control} name="companyRuc" render={({ field }) => (
+                                        <FormItem>
                                             <FormLabel>RUC de la Empresa</FormLabel>
                                             <FormControl><Input placeholder="1234567-1-123456" {...field} /></FormControl>
                                             <FormMessage />
                                         </FormItem>
                                     )}/>
-                                    <FormField control={configForm.control} name="dv" render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>DV</FormLabel>
-                                            <FormControl><Input placeholder="90" {...field} /></FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                </div>
                                 <FormField control={configForm.control} name="webhookIdentifier" render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Identificador para Webhook</FormLabel>
                                         <FormControl><Input placeholder="mi-empresa-slug" {...field} /></FormControl>
                                         <FormDescription>
-                                            {webhookUrl ? (
-                                                <>URL del Webhook: <code className="bg-muted p-1 rounded">{webhookUrl}</code></>
-                                            ) : "Identificador único para la URL del webhook."}
+                                            Identificador único para la URL del webhook de este cliente.
                                         </FormDescription>
                                         <FormMessage />
                                     </FormItem>
                                 )}/>
+                                {webhookUrl && (
+                                    <div className="space-y-2 rounded-md border bg-muted/50 p-4">
+                                        <h4 className="font-medium">URL de Webhook para Automatización</h4>
+                                        <p className="text-sm text-muted-foreground">Usa esta URL en tu sistema externo (ERP) para enviar facturas automáticamente a Fact-UbicSystem.</p>
+                                        <div className="flex items-center gap-2">
+                                            <Input readOnly value={webhookUrl} className="font-mono text-sm bg-background" />
+                                            <Button type="button" size="icon" variant="ghost" onClick={copyWebhookUrl}>
+                                                <Copy className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -482,7 +502,3 @@ export default function SettingsPage() {
     </main>
   );
 }
-
-    
-
-    
