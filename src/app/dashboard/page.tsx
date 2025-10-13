@@ -26,7 +26,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const firestore = useFirestore();
 
-  const invoicesQuery = useMemo(
+  const invoicesQuery = useMemoFirebase(
     () => firestore 
       ? query(collection(firestore, "invoiceSubmissions"), orderBy("submissionDate", "desc"), limit(5))
       : null,
@@ -137,3 +137,4 @@ export default function DashboardPage() {
     </main>
   );
 }
+
