@@ -1,9 +1,11 @@
+
 "use client";
 
 import { useUser } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
 
 export default function DashboardLayout({
   children,
@@ -27,5 +29,5 @@ export default function DashboardLayout({
     );
   }
 
-  return <div className="flex min-h-screen flex-1 flex-col">{children}</div>;
+  return <AppShell>{children}</AppShell>;
 }
