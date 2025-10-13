@@ -3,7 +3,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   FileText,
   LayoutDashboard,
@@ -12,18 +12,8 @@ import {
   User,
   GitBranch,
   Database,
-  LogOut,
 } from "lucide-react";
-import { signOut } from "firebase/auth";
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   SidebarProvider,
   Sidebar,
@@ -43,7 +33,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
-import { useUser, useAuth } from "@/firebase";
 
 const menuItems = [
   {
@@ -62,50 +51,6 @@ const menuItems = [
     label: "Configuración",
   },
 ];
-
-function UserProfile() {
-    const { user } = useUser();
-    const auth = useAuth();
-    const router = useRouter();
-
-    const handleSignOut = async () => {
-        if (!auth) return;
-        await signOut(auth);
-        router.push('/login');
-    }
-
-    if (!user) return null;
-
-    return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full justify-start gap-2 px-2">
-              <div className="flex size-8 items-center justify-center rounded-full bg-muted">
-                <User className="size-4" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-medium">{user.displayName || user.email || "Usuario"}</p>
-                <p className="text-xs text-muted-foreground">
-                  {user.email}
-                </p>
-              </div>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="mb-2 w-56">
-            <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>Perfil</DropdownMenuItem>
-            <DropdownMenuItem disabled>Facturación</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSignOut}>
-                <LogOut className="mr-2 h-4 w-4"/>
-                Cerrar Sesión
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-    )
-}
-
 
 function MainSidebar() {
   const pathname = usePathname();
@@ -183,7 +128,7 @@ function MainSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="group-data-[collapsible=icon]:hidden">
-        <UserProfile />
+        {/* UserProfile removed as auth is bypassed */}
       </SidebarFooter>
     </Sidebar>
   );
@@ -203,7 +148,6 @@ function MobileHeader() {
       <div className="w-full flex-1">
         <Logo />
       </div>
-       <UserProfile />
     </header>
   );
 }
@@ -212,6 +156,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
 
+  // Since auth is bypassed, we can render the main shell structure directly.
+  // The login page itself will handle the redirect.
   if (isLoginPage) {
     return <>{children}</>;
   }
