@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   FileText,
   LayoutDashboard,
@@ -11,7 +11,9 @@ import {
   User,
   GitBranch,
   Database,
+  LogOut,
 } from "lucide-react";
+import { getAuth, signOut } from "firebase/auth";
 
 import {
   DropdownMenu,
@@ -40,6 +42,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
+import { useUser } from "@/firebase";
 
 const menuItems = [
   {
@@ -58,6 +61,49 @@ const menuItems = [
     label: "Configuración",
   },
 ];
+
+function UserProfile() {
+    const { user } = useUser();
+    const router = useRouter();
+
+    const handleSignOut = async () => {
+        const auth = getAuth();
+        await signOut(auth);
+        router.push('/login');
+    }
+
+    if (!user) return null;
+
+    return (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="w-full justify-start gap-2 px-2">
+              <div className="flex size-8 items-center justify-center rounded-full bg-muted">
+                <User className="size-4" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium">{user.displayName || "Usuario"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {user.email}
+                </p>
+              </div>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="mb-2 w-56">
+            <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled>Perfil</DropdownMenuItem>
+            <DropdownMenuItem disabled>Facturación</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSignOut}>
+                <LogOut className="mr-2 h-4 w-4"/>
+                Cerrar Sesión
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+    )
+}
+
 
 function MainSidebar() {
   const pathname = usePathname();
@@ -135,30 +181,7 @@ function MainSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="group-data-[collapsible=icon]:hidden">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="w-full justify-start gap-2 px-2">
-              <div className="flex size-8 items-center justify-center rounded-full bg-muted">
-                <User className="size-4" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-medium">Usuario Admin</p>
-                <p className="text-xs text-muted-foreground">
-                  admin@example.com
-                </p>
-              </div>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="mb-2 w-56">
-            <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Perfil</DropdownMenuItem>
-            <DropdownMenuItem>Facturación</DropdownMenuItem>
-            <DropdownMenuItem>Equipo</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Cerrar Sesión</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <UserProfile />
       </SidebarFooter>
     </Sidebar>
   );
@@ -183,11 +206,14 @@ function MobileHeader() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/login';
+
   return (
     <SidebarProvider>
-      <MainSidebar />
+      {!isLoginPage && <MainSidebar />}
       <SidebarInset className="flex flex-col">
-        <MobileHeader />
+         {!isLoginPage && <MobileHeader />}
         {children}
       </SidebarInset>
     </SidebarProvider>

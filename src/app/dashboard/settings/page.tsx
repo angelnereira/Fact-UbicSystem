@@ -1,9 +1,8 @@
 
-
 "use client";
 
 import * as React from "react";
-import { Loader2, PlusCircle, Trash2, CheckCircle, AlertCircle, Lock, Unlock, Copy } from "lucide-react";
+import { Loader2, PlusCircle, Trash2, CheckCircle, AlertCircle, Lock, Unlock, Copy, FileText } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +12,7 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, useMemoFirebase, useAuth } from "@/firebase";
+import { useFirestore, useMemoFirebase, useAuth, useUser } from "@/firebase";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -57,6 +56,8 @@ export default function SettingsPage() {
   const [isDemoLocked, setIsDemoLocked] = React.useState(true);
   const [isProdLocked, setIsProdLocked] = React.useState(true);
 
+  // Folios state
+  const [folios, setFolios] = React.useState<{count: number | string, loading: boolean}>({ count: 'N/A', loading: false });
 
   const configForm = useForm<ConfigFormValues>({
     resolver: zodResolver(configSchema),
@@ -81,18 +82,38 @@ export default function SettingsPage() {
     return configs.find(c => c.id === selectedConfigId);
   }, [configs, selectedConfigId]);
 
+  const fetchFolios = React.useCallback(async (configId: string, env: 'demo' | 'prod') => {
+    setFolios({ count: 'Cargando...', loading: true });
+    try {
+      const response = await fetch(`/api/hka/folios?configId=${configId}&env=${env}`);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Error desconocido");
+      setFolios({ count: result.folios, loading: false });
+    } catch (error: any) {
+      setFolios({ count: 'Error', loading: false });
+       toast({
+        variant: "destructive",
+        title: "Error al Consultar Folios",
+        description: error.message,
+      });
+    }
+  }, [toast]);
+
+
   React.useEffect(() => {
     if (selectedConfig) {
       configForm.reset(selectedConfig);
+      fetchFolios(selectedConfig.id, 'demo');
     } else {
       configForm.reset({
         companyName: "", companyRuc: "", webhookIdentifier: "",
         demoUser: "", demoPassword: "", prodUser: "", prodPassword: "",
       });
+       setFolios({ count: 'N/A', loading: false });
     }
     setIsDemoLocked(true);
     setIsProdLocked(true);
-  }, [selectedConfig, configForm]);
+  }, [selectedConfig, configForm, fetchFolios]);
   
   React.useEffect(() => {
     if(!selectedConfigId && configs.length > 0) {
@@ -320,18 +341,27 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             {loadingConfigs ? <Skeleton className="h-10 w-full" /> : (
-              <Select onValueChange={setSelectedConfigId} value={selectedConfigId}>
-                <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un cliente..." />
-                </SelectTrigger>
-                <SelectContent>
-                    {configs.map((config) => (
-                        <SelectItem key={config.id} value={config.id}>
-                            {config.companyName} ({config.companyRuc})
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-4 items-center">
+                <Select onValueChange={setSelectedConfigId} value={selectedConfigId}>
+                    <SelectTrigger className="flex-grow">
+                        <SelectValue placeholder="Selecciona un cliente..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {configs.map((config) => (
+                            <SelectItem key={config.id} value={config.id}>
+                                {config.companyName} ({config.companyRuc})
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {selectedConfigId && (
+                    <Card className="flex items-center p-2 pr-4 bg-muted/50 border-dashed">
+                        <FileText className="h-5 w-5 mr-2 text-muted-foreground"/>
+                        <span className="text-sm text-muted-foreground mr-1">Folios Demo:</span>
+                        <span className="font-bold text-sm">{folios.loading ? <Loader2 className="h-4 w-4 animate-spin"/> : folios.count}</span>
+                    </Card>
+                )}
+              </div>
             )}
           </CardContent>
       </Card>

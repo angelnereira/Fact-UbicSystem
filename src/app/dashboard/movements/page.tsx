@@ -44,6 +44,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { timbrar } from "@/lib/hka/actions";
 
 // A custom hook to fetch and subscribe to a collection
 function useCollection<T>(q: any) {
@@ -82,7 +84,10 @@ type InvoiceSubmission = {
   id: string;
   submissionDate: string;
   status: 'pending' | 'certified' | 'failed' | 'error';
-  invoiceData: string;
+  invoiceData: string; // JSON string
+  configId: string;
+  source: 'manual' | 'webhook';
+  hkaResponseId?: string;
 };
 
 const statusTranslations: { [key: string]: string } = {
@@ -119,6 +124,7 @@ export default function MovementsPage() {
   const [filterText, setFilterText] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterDate, setFilterDate] = useState<DateRange | undefined>();
+  const [isRetrying, setIsRetrying] = useState<string | null>(null);
 
   const firestore = useFirestore();
 
@@ -170,12 +176,39 @@ export default function MovementsPage() {
             return false;
         }
     })
-  }, [rawMovements, filterText])
+  }, [rawMovements, filterText]);
 
 
   const copyToClipboard = async () => {
     toast({ title: "Información", description: fullWebhookUrl });
   };
+  
+  const handleRetry = async (submission: InvoiceSubmission) => {
+    setIsRetrying(submission.id);
+    toast({
+        title: "Reintentando envío...",
+        description: `Volviendo a enviar la factura con ID: ${submission.id}`
+    })
+    
+    try {
+        const invoicePayload = JSON.parse(submission.invoiceData);
+        // We assume 'demo' for retries for safety, this could be configurable
+        await timbrar(invoicePayload, submission.configId, 'demo'); 
+        toast({
+            title: "Reintento Exitoso",
+            description: "La factura ha sido timbrada correctamente."
+        });
+
+    } catch (error: any) {
+         toast({
+            variant: "destructive",
+            title: "Fallo el Reintento",
+            description: error.message || "No se pudo completar el reintento."
+        });
+    } finally {
+        setIsRetrying(null);
+    }
+  }
 
   const renderTableContent = () => {
     if (isLoading) {
@@ -223,12 +256,42 @@ export default function MovementsPage() {
             {details}
           </TableCell>
           <TableCell className="text-right">
-            <Button variant="ghost" size="sm" className="mr-2">
-              <Info className="h-4 w-4 mr-1" /> Ver
-            </Button>
-            {mov.status === "failed" && (
-              <Button variant="outline" size="sm">
-                <RefreshCw className="h-4 w-4 mr-1" /> Reintentar
+             <Dialog>
+                 <DialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="mr-2">
+                        <Info className="h-4 w-4 mr-1" /> Ver
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Detalles de la Sumisión</DialogTitle>
+                        <DialogDescription>ID: {mov.id}</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 max-h-[60vh] overflow-y-auto">
+                        <div>
+                            <h3 className="font-semibold mb-2">Datos Enviados</h3>
+                            <pre className="p-2 bg-muted rounded-md text-xs">
+                                {JSON.stringify(JSON.parse(mov.invoiceData), null, 2)}
+                            </pre>
+                        </div>
+                        {/* Here you would fetch and display the HKA response based on mov.hkaResponseId */}
+                         <div>
+                            <h3 className="font-semibold mb-2">Respuesta de HKA</h3>
+                            <p className="text-sm text-muted-foreground">La visualización de la respuesta de HKA no está implementada.</p>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {(mov.status === "failed" || mov.status === "error") && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={isRetrying === mov.id}
+                onClick={() => handleRetry(mov)}
+              >
+                {isRetrying === mov.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <RefreshCw className="h-4 w-4 mr-1" />}
+                {isRetrying === mov.id ? "" : "Reintentar"}
               </Button>
             )}
           </TableCell>
@@ -262,9 +325,9 @@ export default function MovementsPage() {
         />
         <StatCard
           title="Folios Restantes"
-          value={"Cargando..."}
+          value={"N/A"}
           icon={FileText}
-          description="Folios disponibles para timbrar."
+          description="Consulte en la página de configuración."
         />
         <StatCard
           title="Latencia de API"

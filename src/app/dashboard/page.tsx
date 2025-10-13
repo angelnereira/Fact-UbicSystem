@@ -17,6 +17,7 @@ import { RecentInvoices, type RecentInvoice } from "@/components/recent-invoices
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { initializeFirebase } from "@/firebase/server";
 import { HkaError } from "@/lib/hka/types";
+import { FoliosStatCard } from "@/components/folios-stat-card";
 
 export const metadata: Metadata = {
   title: "Dashboard | Fact-UbicSystem",
@@ -60,8 +61,7 @@ async function getRecentInvoices(): Promise<RecentInvoice[]> {
 export default async function DashboardPage() {
   
   const recentInvoices = await getRecentInvoices();
-  const foliosError = false; // Assume no error for initial render.
-  const remainingFolios = "Cargando..."; // This will be loaded on the client.
+  const foliosError = false;
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
@@ -91,12 +91,7 @@ export default async function DashboardPage() {
           description={foliosError ? "Fallo al conectar con HKA" : "Conexión segura a The Factory HKA."}
           status={foliosError ? "danger" : "success"}
         />
-        <StatCard
-          title="Folios Restantes"
-          value={remainingFolios.toLocaleString()}
-          icon={FileStack}
-          description="Folios disponibles para timbrar."
-        />
+        <FoliosStatCard />
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">

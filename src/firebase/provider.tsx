@@ -28,7 +28,8 @@ import { firebaseConfig } from './config';
 export class FirestorePermissionError extends Error {
   constructor(context: {
     path: string;
-    operation: 'get' | 'list' | 'create' | 'update' | 'delete';
+    operation: 'get' | 'list' | 'create' | 'update' | 'delete' | 'write';
+    requestResourceData?: any;
   }) {
     const message = `Firebase permission denied on ${context.operation} at path: ${context.path}`;
     super(message);
