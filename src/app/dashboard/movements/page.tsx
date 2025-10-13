@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -59,7 +60,7 @@ type InvoiceSubmission = {
 };
 
 // A custom hook to fetch and subscribe to a collection
-function useCollection<T>(q: any) {
+function useCollection<T extends {id: string}>(q: any) {
   const [data, setData] = useState<T[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);

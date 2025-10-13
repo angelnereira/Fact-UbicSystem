@@ -50,6 +50,7 @@ import { collection, addDoc, updateDoc, doc, query, where, getDocs, limit } from
  */
 export async function POST(request: Request, { params }: { params: { identifier: string } }) {
   const { identifier } = params;
+  console.log(`[WEBHOOK] Received request for identifier: ${identifier}`);
   
   const { firestore } = initializeFirebase();
   const invoiceSubmissionsRef = collection(firestore, 'invoiceSubmissions');
@@ -68,18 +69,21 @@ export async function POST(request: Request, { params }: { params: { identifier:
     const configSnapshot = await getDocs(configQuery);
 
     if (configSnapshot.empty) {
+        console.error(`[WEBHOOK] No configuration found for identifier '${identifier}'.`);
         return NextResponse.json(
             { message: `No configuration found for webhook identifier '${identifier}'.` },
             { status: 404 }
         );
     }
     configId = configSnapshot.docs[0].id;
+    console.log(`[WEBHOOK] Found configuration with ID: ${configId}`);
     
     const body = await request.json();
     const invoicePayload = body.invoice;
     const environment = (body.environment === 'prod') ? 'prod' : 'demo';
 
     if (!invoicePayload) {
+      console.error("[WEBHOOK] Validation Error: Missing 'invoice' payload.");
       return NextResponse.json(
         { message: 'El payload de la factura (invoice) es requerido.' },
         { status: 400 }
@@ -97,6 +101,7 @@ export async function POST(request: Request, { params }: { params: { identifier:
     
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
     submissionDocId = submissionDocRef.id;
+    console.log(`[WEBHOOK] Created submission record with ID: ${submissionDocId}`);
 
     const hkaResponse = await timbrar(invoicePayload, configId, environment);
     
@@ -107,12 +112,14 @@ export async function POST(request: Request, { params }: { params: { identifier:
       invoiceSubmissionId: submissionDocId,
     };
     const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
+    console.log(`[WEBHOOK] Created HKA response record with ID: ${hkaResponseDocRef.id}`);
 
     const submissionDocToUpdate = doc(firestore, 'invoiceSubmissions', submissionDocId);
     await updateDoc(submissionDocToUpdate, {
       status: 'certified',
       hkaResponseId: hkaResponseDocRef.id
     });
+     console.log(`[WEBHOOK] Updated submission ${submissionDocId} to 'certified'.`);
 
     return NextResponse.json({
         success: true,
@@ -121,7 +128,7 @@ export async function POST(request: Request, { params }: { params: { identifier:
     }, { status: 200 });
 
   } catch (error: any) {
-    console.error(`Error en el webhook [${identifier}]:`, error);
+    console.error(`[WEBHOOK] Error for identifier [${identifier}]:`, error);
 
     const errorStatus = error instanceof HkaError ? 'failed' : 'error';
     let hkaResponseId: string | null = null;
@@ -135,8 +142,9 @@ export async function POST(request: Request, { params }: { params: { identifier:
         };
         const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
         hkaResponseId = hkaResponseDocRef.id;
+        console.log(`[WEBHOOK] Created HKA error response record with ID: ${hkaResponseId}`);
     } catch (dbError) {
-        console.error("Error al guardar la respuesta de HKA en Firestore:", dbError);
+        console.error("[WEBHOOK] FATAL: Error saving HKA's error response to Firestore:", dbError);
     }
 
     if (submissionDocId) {
@@ -146,8 +154,9 @@ export async function POST(request: Request, { params }: { params: { identifier:
                 status: errorStatus,
                 hkaResponseId: hkaResponseId,
             });
+            console.log(`[WEBHOOK] Updated submission ${submissionDocId} to status '${errorStatus}'.`);
         } catch (updateError) {
-            console.error("Error al actualizar el estado de la sumisión:", updateError);
+            console.error("[WEBHOOK] FATAL: Error updating submission status after an error:", updateError);
         }
     }
 

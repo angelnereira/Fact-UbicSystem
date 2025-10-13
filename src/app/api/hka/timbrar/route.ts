@@ -47,7 +47,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { invoice: invoicePayload, configId, environment } = body;
 
+    console.log(`[API/TIMBRAR] Received request for configId: ${configId}`);
+
     if (!invoicePayload || !configId || !environment) {
+      console.error("[API/TIMBRAR] Validation Error: Missing required fields.");
       return NextResponse.json(
         { message: 'Los campos invoice, configId, y environment son requeridos.' },
         { status: 400 }
@@ -65,6 +68,7 @@ export async function POST(request: Request) {
     
     const submissionDocRef = await addDoc(invoiceSubmissionsRef, submissionRecord);
     submissionDocId = submissionDocRef.id;
+    console.log(`[API/TIMBRAR] Created submission record with ID: ${submissionDocId}`);
 
     // Llamar a timbrar con la configuración dinámica.
     const hkaResponse = await timbrar(invoicePayload, configId, environment);
@@ -77,23 +81,30 @@ export async function POST(request: Request) {
       invoiceSubmissionId: submissionDocRef.id,
     };
     const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
+    console.log(`[API/TIMBRAR] Created HKA response record with ID: ${hkaResponseDocRef.id}`);
 
     // Actualizar el documento de sumisión
     await updateDoc(submissionDocRef, {
       status: 'certified',
       hkaResponseId: hkaResponseDocRef.id
     });
+    console.log(`[API/TIMBRAR] Updated submission ${submissionDocId} to 'certified'.`);
 
     return NextResponse.json(hkaResponse, { status: 200 });
 
   } catch (error: any) {
-    console.error('Error en timbrado manual:', error);
+    console.error('[API/TIMBRAR] Error during manual stamping:', error);
     
     // Si hay un error, actualiza el registro de sumisión a 'failed'
     if (submissionDocId) {
-        await updateDoc(doc(firestore, 'invoiceSubmissions', submissionDocId), {
-            status: 'failed',
-        });
+        try {
+            await updateDoc(doc(firestore, 'invoiceSubmissions', submissionDocId), {
+                status: 'failed',
+            });
+            console.log(`[API/TIMBRAR] Updated submission ${submissionDocId} to 'failed'.`);
+        } catch (updateError) {
+             console.error(`[API/TIMBRAR] FATAL: Could not update submission ${submissionDocId} to failed status.`, updateError);
+        }
     }
 
     if (error instanceof HkaError) {

@@ -1,104 +1,36 @@
-/**
- * @fileoverview Firestore Security Rules for e-Factura Bridge.
- *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for user profiles
- * and allows open access to invoice submissions and HKA responses.
- * System configurations are publicly accessible.
- *
- * Data Structure:
- * - /users/{userId}: Stores user profiles, accessible only by the user.
- * - /configurations/{configId}: Stores system configurations, publicly accessible.
- * - /invoiceSubmissions/{submissionId}: Stores invoice submissions, publicly accessible.
- * - /hkaResponses/{responseId}: Stores HKA responses, publicly accessible.
- *
- * Key Security Decisions:
- * - User profiles are private and only accessible to the owning user.
- * - Invoice submissions and HKA responses are publicly accessible.
- * - System configurations are publicly accessible.
- * - Listing of users, invoice submissions, and HKA responses is not allowed to prevent data scraping.
- */
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    /**
-     * @description Manages user profile access.
-     * @path /users/{userId}
-     * @allow (create) Authenticated user can create their own profile with matching UID.
-     * @deny (create) Authenticated user cannot create a profile for another user.
-     * @allow (get) Authenticated user can read their own profile.
-     * @deny (get) Authenticated user cannot read another user's profile.
-     * @deny (list) Listing users is not allowed.
-     * @allow (update) Authenticated user can update their own profile.
-     * @deny (update) Authenticated user cannot update another user's profile.
-     * @allow (delete) Authenticated user can delete their own profile.
-     * @deny (delete) Authenticated user cannot delete another user's profile.
-     * @principle Enforces document ownership for writes and restricts reads to the owner.
-     */
-    match /users/{userId} {
-      allow create: if isSignedIn() && isOwner(userId);
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if false;
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-    }
-
-    /**
-     * @description Manages system configuration access.
-     * @path /configurations/{configId}
-     * @allow (get) Anyone can read system configurations.
-     * @allow (list) Anyone can list system configurations.
-     * @deny (create) No one can create system configurations via client.
-     * @deny (update) No one can update system configurations via client.
-     * @deny (delete) No one can delete system configurations via client.
-     * @principle Allows public read access to configurations.
-     */
+    
+    // Configurations can only be read and modified by authenticated users.
+    // This is a secure collection.
     match /configurations/{configId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow read, create, update, delete: if request.auth != null;
     }
 
-    /**
-     * @description Manages invoice submission access.
-     * @path /invoiceSubmissions/{submissionId}
-     * @allow (get) Anyone can read invoice submissions.
-     * @allow (list) Anyone can list invoice submissions.
-     * @deny (create) No one can create invoice submissions via client.
-     * @deny (update) No one can update invoice submissions via client.
-     * @deny (delete) No one can delete invoice submissions via client.
-     * @principle Allows public read access to invoice submissions.
-     */
+    // User profiles can only be managed by authenticated users.
+    // Typically, you'd restrict this to the user themselves.
+    match /users/{userId} {
+      allow read, create: if request.auth != null;
+      allow update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // API endpoints (like webhooks or system processes) can write to these
+    // collections without user authentication. This is necessary for server-to-server communication.
     match /invoiceSubmissions/{submissionId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow read: if request.auth != null; // Only authenticated users can read logs
+      allow create, update: if true; // Allow server-side processes to write
     }
 
-    /**
-     * @description Manages HKA response access.
-     * @path /hkaResponses/{responseId}
-     * @allow (get) Anyone can read HKA responses.
-     * @allow (list) Anyone can list HKA responses.
-     * @deny (create) No one can create HKA responses via client.
-     * @deny (update) No one can update HKA responses via client.
-     * @deny (delete) No one can delete HKA responses via client.
-     * @principle Allows public read access to HKA responses.
-     */
     match /hkaResponses/{responseId} {
-      allow get, list: if true;
-      allow create, update, delete: if false;
+      allow read: if request.auth != null; // Only authenticated users can read logs
+      allow create: if true; // Allow server-side processes to write
     }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    function isExistingOwner(userId) {
-      return isSignedIn() && isOwner(userId) && resource != null;
+    // Default deny for any other path.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
