@@ -1,4 +1,6 @@
-import type { Metadata } from "next";
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -7,57 +9,69 @@ import {
   PlugZap,
   GitBranch,
 } from "lucide-react";
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { RecentInvoices, type RecentInvoice } from "@/components/recent-invoices";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { initializeFirebase } from "@/firebase/server";
+import { useFirestore, useMemoFirebase } from "@/firebase";
 import { FoliosStatCard } from "@/components/folios-stat-card";
 
-export const metadata: Metadata = {
-  title: "Dashboard | Fact-UbicSystem",
-};
 
-async function getRecentInvoices(): Promise<RecentInvoice[]> {
-  try {
-    const { firestore } = initializeFirebase();
-    const q = query(collection(firestore, "invoiceSubmissions"), orderBy("submissionDate", "desc"), limit(5));
-    const querySnapshot = await getDocs(q);
+export default function DashboardPage() {
+  const firestore = useFirestore();
+  const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    if (querySnapshot.empty) {
-      return [];
-    }
-
-    return querySnapshot.docs.map(doc => {
-      const data = doc.data();
-      let customerName = 'N/A';
-      let customerTaxId = 'N/A';
-      try {
-        const invoiceData = JSON.parse(data.invoiceData);
-        customerName = invoiceData.customerName || 'N/A';
-        customerTaxId = invoiceData.customerRuc || 'N/A';
-      } catch {}
-
-      return {
-        id: doc.id,
-        customerName,
-        customerTaxId,
-        status: data.status,
-        createdAt: new Date(data.submissionDate),
-      };
-    });
-  } catch (error) {
-    console.error("Error fetching recent invoices for dashboard:", error);
-    return []; // Devuelve vacío en caso de error para no romper la página
-  }
-}
-
-export default async function DashboardPage() {
+  const invoicesQuery = useMemoFirebase(
+    () => firestore 
+      ? query(collection(firestore, "invoiceSubmissions"), orderBy("submissionDate", "desc"), limit(5))
+      : null,
+    [firestore]
+  );
   
-  const recentInvoices = await getRecentInvoices();
+  useEffect(() => {
+    if (!invoicesQuery) {
+        setLoading(false);
+        return;
+    };
+    const unsubscribe = onSnapshot(invoicesQuery, (querySnapshot) => {
+       if (querySnapshot.empty) {
+        setRecentInvoices([]);
+        setLoading(false);
+        return;
+      }
+      const invoices = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        let customerName = 'N/A';
+        let customerTaxId = 'N/A';
+        try {
+          const invoiceData = JSON.parse(data.invoiceData);
+          customerName = invoiceData.customerName || 'N/A';
+          customerTaxId = invoiceData.customerRuc || 'N/A';
+        } catch {}
+
+        return {
+          id: doc.id,
+          customerName,
+          customerTaxId,
+          status: data.status,
+          createdAt: new Date(data.submissionDate),
+        };
+      });
+      setRecentInvoices(invoices);
+      setLoading(false);
+    }, (error) => {
+        console.error("Error fetching recent invoices:", error);
+        setRecentInvoices([]);
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [invoicesQuery]);
+
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
