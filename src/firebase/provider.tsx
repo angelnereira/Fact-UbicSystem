@@ -15,6 +15,8 @@ import {
   onAuthStateChanged,
   type Auth,
   type User,
+  GoogleAuthProvider,
+  signInWithPopup,
 } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { firebaseConfig } from './config';
