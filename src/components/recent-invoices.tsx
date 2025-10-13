@@ -43,7 +43,6 @@ export type RecentInvoice = {
   id: string;
   customerName: string;
   customerTaxId: string;
-  total: number;
   status: "pending" | "certified" | "failed" | "error";
   createdAt: Date;
 };
@@ -108,7 +107,7 @@ export function RecentInvoices({ initialInvoices }: RecentInvoicesProps) {
                 <TableHead>Cliente</TableHead>
                 <TableHead className="hidden sm:table-cell">Estado</TableHead>
                 <TableHead className="hidden md:table-cell">Fecha</TableHead>
-                <TableHead className="text-right">ID Externo</TableHead>
+                <TableHead className="text-right">ID</TableHead>
                 <TableHead>
                   <span className="sr-only">Acciones</span>
                 </TableHead>

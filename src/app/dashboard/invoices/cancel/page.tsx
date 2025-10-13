@@ -25,19 +25,24 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { useConfigurations } from "@/hooks/use-configurations";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function CancelInvoicePage() {
   const [invoiceId, setInvoiceId] = useState("");
   const [reason, setReason] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [configId, setConfigId] = useState('');
+  const [environment, setEnvironment] = useState<'demo' | 'prod'>('demo');
   const { toast } = useToast();
+  const { configs, loading: loadingConfigs } = useConfigurations();
 
   const handleCancel = async () => {
-    if (!invoiceId || !reason) {
+    if (!invoiceId || !reason || !configId || !environment) {
       toast({
         variant: "destructive",
         title: "Información Faltante",
-        description: "Por favor, proporciona el ID de la factura y el motivo de la anulación.",
+        description: "Todos los campos son requeridos para anular la factura.",
       });
       return;
     }
@@ -47,7 +52,7 @@ export default function CancelInvoicePage() {
         const response = await fetch('/api/hka/cancel', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ invoiceId, reason }),
+            body: JSON.stringify({ invoiceId, reason, configId, environment }),
         });
 
         const result = await response.json();
@@ -89,6 +94,35 @@ export default function CancelInvoicePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+                <label htmlFor="configId" className="font-medium">Cliente HKA</label>
+                <Select onValueChange={setConfigId} value={configId} disabled={loadingConfigs}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Selecciona el cliente emisor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {configs.map((config) => (
+                        <SelectItem key={config.id} value={config.id}>
+                          {config.companyName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                </Select>
+            </div>
+             <div className="space-y-2">
+                <label htmlFor="environment" className="font-medium">Ambiente HKA</label>
+                <Select onValueChange={(value) => setEnvironment(value as 'demo' | 'prod')} value={environment}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Selecciona el ambiente..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="demo">Demo</SelectItem>
+                      <SelectItem value="prod">Producción</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+          </div>
           <div className="space-y-2">
             <label htmlFor="invoiceId" className="font-medium">ID de Factura (UUID o Folio)</label>
             <Input
@@ -119,7 +153,7 @@ export default function CancelInvoicePage() {
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>¿Estás absolutely seguro?</AlertDialogTitle>
+                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
                 <AlertDialogDescription>
                   Esta acción es irreversible y enviará una solicitud formal de anulación para la factura{" "}
                   <strong>{invoiceId}</strong>. No se puede deshacer.

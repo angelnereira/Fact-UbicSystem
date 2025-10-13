@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -13,7 +12,7 @@ import {
   Search,
   Calendar as CalendarIcon,
 } from "lucide-react";
-import { collection, query, orderBy, limit, where, Timestamp, onSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, limit, where, Timestamp, onSnapshot, updateDoc, doc, addDoc } from "firebase/firestore";
 import { useFirestore, useMemoFirebase } from "@/firebase";
 import type { DateRange } from "react-day-picker";
 import { addDays, format } from "date-fns";
@@ -46,6 +45,18 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { timbrar } from "@/lib/hka/actions";
+import { HkaError } from "@/lib/hka/types";
+
+
+type InvoiceSubmission = {
+  id: string;
+  submissionDate: string;
+  status: 'pending' | 'certified' | 'failed' | 'error';
+  invoiceData: string; // JSON string
+  configId: string;
+  source: 'manual' | 'webhook';
+  hkaResponseId?: string;
+};
 
 // A custom hook to fetch and subscribe to a collection
 function useCollection<T>(q: any) {
@@ -62,8 +73,8 @@ function useCollection<T>(q: any) {
     const unsub = onSnapshot(
       q,
       (snap: any) => {
-        const data = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
-        setData(data);
+        const docs = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
+        setData(docs);
         setIsLoading(false);
         setError(null);
       },
@@ -77,18 +88,6 @@ function useCollection<T>(q: any) {
 
   return { data, isLoading, error };
 }
-
-
-// Tipado para los datos que vienen de Firestore
-type InvoiceSubmission = {
-  id: string;
-  submissionDate: string;
-  status: 'pending' | 'certified' | 'failed' | 'error';
-  invoiceData: string; // JSON string
-  configId: string;
-  source: 'manual' | 'webhook';
-  hkaResponseId?: string;
-};
 
 const statusTranslations: { [key: string]: string } = {
   pending: "Pendiente",
@@ -120,15 +119,12 @@ const mockApiHealth = {
 export default function MovementsPage() {
   const { toast } = useToast();
   
-  // State for filters
   const [filterText, setFilterText] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterDate, setFilterDate] = useState<DateRange | undefined>();
   const [isRetrying, setIsRetrying] = useState<string | null>(null);
 
   const firestore = useFirestore();
-
-  const fullWebhookUrl = "La URL del Webhook ahora se configura en el sistema que llama a la API.";
 
   const submissionsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -143,17 +139,16 @@ export default function MovementsPage() {
       filters.push(where("submissionDate", ">=", Timestamp.fromDate(filterDate.from)));
     }
     if (filterDate?.to) {
-      filters.push(where("submissionDate", "<=", Timestamp.fromDate(addDays(filterDate.to, 1))));
+      const toDate = new Date(filterDate.to);
+      toDate.setHours(23, 59, 59, 999);
+      filters.push(where("submissionDate", "<=", Timestamp.fromDate(toDate)));
     }
-  
-    // El filtrado de texto completo no es compatible con Firestore sin un servicio de terceros como Algolia.
-    // Lo haremos del lado del cliente por ahora.
   
     return query(
       collection(firestore, "invoiceSubmissions"),
       ...filters,
       orderBy("submissionDate", "desc"),
-      limit(50) // Aumentamos el límite para el filtrado del lado del cliente
+      limit(50)
     );
   }, [firestore, filterStatus, filterDate]);
   
@@ -166,41 +161,62 @@ export default function MovementsPage() {
     return rawMovements.filter(mov => {
         try {
             const invoice = JSON.parse(mov.invoiceData);
-            const externalId = invoice.externalId || '';
-            const customerName = invoice.customerName || '';
-            const customerRuc = invoice.customerRuc || '';
-            return externalId.toLowerCase().includes(filterText.toLowerCase()) ||
-                   customerName.toLowerCase().includes(filterText.toLowerCase()) ||
-                   customerRuc.toLowerCase().includes(filterText.toLowerCase())
+            const searchableFields = [
+              invoice.externalId,
+              invoice.customerName,
+              invoice.customerRuc,
+              mov.id
+            ].filter(Boolean);
+
+            return searchableFields.some(field => 
+              field.toLowerCase().includes(filterText.toLowerCase())
+            );
         } catch {
-            return false;
+            return mov.id.toLowerCase().includes(filterText.toLowerCase());
         }
     })
   }, [rawMovements, filterText]);
 
 
-  const copyToClipboard = async () => {
-    toast({ title: "Información", description: fullWebhookUrl });
-  };
-  
   const handleRetry = async (submission: InvoiceSubmission) => {
+    if (!firestore) return;
     setIsRetrying(submission.id);
     toast({
         title: "Reintentando envío...",
         description: `Volviendo a enviar la factura con ID: ${submission.id}`
-    })
+    });
     
+    const submissionDocRef = doc(firestore, 'invoiceSubmissions', submission.id);
+
     try {
         const invoicePayload = JSON.parse(submission.invoiceData);
         // We assume 'demo' for retries for safety, this could be configurable
-        await timbrar(invoicePayload, submission.configId, 'demo'); 
+        const hkaResponse = await timbrar(invoicePayload, submission.configId, 'demo'); 
+
+        const hkaResponsesRef = collection(firestore, 'hkaResponses');
+        const hkaResponseRecord = {
+          responseDate: new Date().toISOString(),
+          statusCode: 200,
+          responseBody: JSON.stringify(hkaResponse),
+          invoiceSubmissionId: submission.id,
+        };
+        const hkaResponseDocRef = await addDoc(hkaResponsesRef, hkaResponseRecord);
+
+        await updateDoc(submissionDocRef, {
+            status: 'certified',
+            hkaResponseId: hkaResponseDocRef.id
+        });
+
         toast({
             title: "Reintento Exitoso",
             description: "La factura ha sido timbrada correctamente."
         });
 
     } catch (error: any) {
-         toast({
+        await updateDoc(submissionDocRef, {
+            status: 'failed',
+        });
+        toast({
             variant: "destructive",
             title: "Fallo el Reintento",
             description: error.message || "No se pudo completar el reintento."
@@ -247,7 +263,7 @@ export default function MovementsPage() {
           <TableCell>
             <Badge
               variant={statusBadgeVariants[mov.status] || 'secondary'}
-              className={statusBadgeStyles[mov.status]}
+              className={cn(statusBadgeStyles[mov.status], 'border')}
             >
               {statusTranslations[mov.status] || mov.status}
             </Badge>
@@ -274,8 +290,7 @@ export default function MovementsPage() {
                                 {JSON.stringify(JSON.parse(mov.invoiceData), null, 2)}
                             </pre>
                         </div>
-                        {/* Here you would fetch and display the HKA response based on mov.hkaResponseId */}
-                         <div>
+                        <div>
                             <h3 className="font-semibold mb-2">Respuesta de HKA</h3>
                             <p className="text-sm text-muted-foreground">La visualización de la respuesta de HKA no está implementada.</p>
                         </div>
@@ -345,7 +360,7 @@ export default function MovementsPage() {
           <div className="relative flex-grow">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por ID externo, cliente o RUC..."
+              placeholder="Buscar por ID, ID externo, cliente o RUC..."
               className="pl-9"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}

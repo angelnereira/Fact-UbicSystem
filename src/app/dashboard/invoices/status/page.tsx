@@ -13,16 +13,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useConfigurations } from "@/hooks/use-configurations";
 
 type StatusResult = {
-  status: 'stamped' | 'cancelled' | 'processing' | 'error' | 'not_found';
+  status: 'stamped' | 'cancelled' | 'processing' | 'error' | 'not_found' | 'failed';
   message: string;
   uuid?: string;
   folio?: string;
   timestamp?: string;
 }
 
-const statusInfo = {
+const statusInfo: Record<StatusResult['status'], { icon: React.ElementType; color: string; title: string }> = {
   stamped: {
     icon: CheckCircle,
     color: "text-green-600",
@@ -47,6 +49,11 @@ const statusInfo = {
     icon: AlertCircle,
     color: "text-gray-500",
     title: "No Encontrada",
+  },
+  failed: {
+    icon: XCircle,
+    color: "text-red-600",
+    title: "Fallida",
   }
 };
 
@@ -55,17 +62,27 @@ export default function InvoiceStatusPage() {
   const [invoiceId, setInvoiceId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<StatusResult | null>(null);
+  const [configId, setConfigId] = useState('');
+  const [environment, setEnvironment] = useState<'demo' | 'prod'>('demo');
   const { toast } = useToast();
+  const { configs, loading: loadingConfigs } = useConfigurations();
 
   const handleCheckStatus = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!invoiceId) return;
+    if (!invoiceId || !configId || !environment) {
+        toast({
+            variant: 'destructive',
+            title: 'Información Faltante',
+            description: 'Por favor, selecciona un cliente, un ambiente y proporciona un ID de factura.',
+        });
+        return;
+    }
 
     setIsLoading(true);
     setResult(null);
 
     try {
-      const response = await fetch(`/api/hka/status/${invoiceId}`);
+      const response = await fetch(`/api/hka/status/${invoiceId}?configId=${configId}&env=${environment}`);
       const data: StatusResult = await response.json();
 
       if (!response.ok) {
@@ -79,6 +96,7 @@ export default function InvoiceStatusPage() {
         title: 'Error de Consulta',
         description: error.message,
       });
+      setResult({ status: 'error', message: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -126,14 +144,45 @@ export default function InvoiceStatusPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleCheckStatus} className="flex items-center gap-4">
-            <Input
-              id="invoiceId"
-              placeholder="Ej: FAC-2024001 o UUID"
-              className="max-w-sm"
-              value={invoiceId}
-              onChange={(e) => setInvoiceId(e.target.value)}
-            />
+          <form onSubmit={handleCheckStatus} className="space-y-4">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="configId" className="block text-sm font-medium mb-1">Cliente HKA</label>
+                   <Select onValueChange={setConfigId} value={configId} disabled={loadingConfigs}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona el cliente emisor..." />
+                      </SelectTrigger>
+                    <SelectContent>
+                      {configs.map((config) => (
+                        <SelectItem key={config.id} value={config.id}>
+                          {config.companyName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label htmlFor="environment" className="block text-sm font-medium mb-1">Ambiente</label>
+                  <Select onValueChange={(value) => setEnvironment(value as 'demo' | 'prod')} value={environment}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona el ambiente..." />
+                      </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="demo">Demo</SelectItem>
+                      <SelectItem value="prod">Producción</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+            </div>
+            <div>
+               <label htmlFor="invoiceId" className="block text-sm font-medium mb-1">ID de Factura (UUID o Folio)</label>
+              <Input
+                id="invoiceId"
+                placeholder="Ej: FAC-2024001 o UUID"
+                value={invoiceId}
+                onChange={(e) => setInvoiceId(e.target.value)}
+              />
+            </div>
             <Button type="submit" disabled={isLoading || !invoiceId}>
               {isLoading && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

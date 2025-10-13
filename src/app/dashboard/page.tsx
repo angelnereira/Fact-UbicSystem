@@ -1,4 +1,3 @@
-
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
@@ -16,7 +15,6 @@ import { StatCard } from "@/components/stat-card";
 import { RecentInvoices, type RecentInvoice } from "@/components/recent-invoices";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { initializeFirebase } from "@/firebase/server";
-import { HkaError } from "@/lib/hka/types";
 import { FoliosStatCard } from "@/components/folios-stat-card";
 
 export const metadata: Metadata = {
@@ -47,7 +45,6 @@ async function getRecentInvoices(): Promise<RecentInvoice[]> {
         id: doc.id,
         customerName,
         customerTaxId,
-        total: 0, // Total no está en la sumisión, se puede calcular después
         status: data.status,
         createdAt: new Date(data.submissionDate),
       };
@@ -61,7 +58,6 @@ async function getRecentInvoices(): Promise<RecentInvoice[]> {
 export default async function DashboardPage() {
   
   const recentInvoices = await getRecentInvoices();
-  const foliosError = false;
 
   return (
     <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6">
@@ -86,10 +82,10 @@ export default async function DashboardPage() {
         />
         <StatCard
           title="Conexión HKA"
-          value={foliosError ? "Error" : "Conectado"}
+          value={"Conectado"}
           icon={PlugZap}
-          description={foliosError ? "Fallo al conectar con HKA" : "Conexión segura a The Factory HKA."}
-          status={foliosError ? "danger" : "success"}
+          description={"Conexión segura a The Factory HKA."}
+          status={"success"}
         />
         <FoliosStatCard />
       </div>
