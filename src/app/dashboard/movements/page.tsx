@@ -15,7 +15,9 @@ import {
 import { collection, query, orderBy, limit, where, Timestamp, onSnapshot, updateDoc, doc, addDoc } from "firebase/firestore";
 import { useFirestore, useMemoFirebase } from "@/firebase";
 import type { DateRange } from "react-day-picker";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
+import { timbrar } from "@/lib/hka/actions";
+import { HkaError } from "@/lib/hka/types";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -44,8 +46,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { timbrar } from "@/lib/hka/actions";
-import { HkaError } from "@/lib/hka/types";
 
 
 type InvoiceSubmission = {
@@ -74,7 +74,7 @@ function useCollection<T>(q: any) {
       q,
       (snap: any) => {
         const docs = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
-        setData(docs);
+        setData(docs as T[]);
         setIsLoading(false);
         setError(null);
       },
@@ -136,12 +136,14 @@ export default function MovementsPage() {
     }
   
     if (filterDate?.from) {
-      filters.push(where("submissionDate", ">=", Timestamp.fromDate(filterDate.from)));
+      const fromTimestamp = Timestamp.fromDate(filterDate.from);
+      filters.push(where("submissionDate", ">=", fromTimestamp.toDate().toISOString()));
     }
     if (filterDate?.to) {
-      const toDate = new Date(filterDate.to);
-      toDate.setHours(23, 59, 59, 999);
-      filters.push(where("submissionDate", "<=", Timestamp.fromDate(toDate)));
+        const toDate = new Date(filterDate.to);
+        toDate.setHours(23, 59, 59, 999);
+        const toTimestamp = Timestamp.fromDate(toDate);
+        filters.push(where("submissionDate", "<=", toTimestamp.toDate().toISOString()));
     }
   
     return query(
@@ -449,3 +451,4 @@ export default function MovementsPage() {
     </main>
   );
 }
+    
