@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { useAuth, useUser } from "@/firebase";
+import { useFirebase } from "@/firebase";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
@@ -44,8 +44,7 @@ const GoogleIcon = () => (
 
 
 export default function LoginPage() {
-  const auth = useAuth();
-  const { user, isUserLoading } = useUser();
+  const { auth, isUserLoading } = useFirebase();
   const router = useRouter();
   const { toast } = useToast();
   
@@ -54,12 +53,6 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
   
-  React.useEffect(() => {
-    if (!isUserLoading && user) {
-        router.push('/dashboard');
-    }
-  }, [user, isUserLoading, router]);
-
   const handleAuthSuccess = (action: string) => {
     toast({
       title: `${action} Exitoso`,
@@ -98,7 +91,7 @@ export default function LoginPage() {
     }
   }
   
-  if (isUserLoading || user) {
+  if (isUserLoading) {
      return (
       <div className="flex h-screen w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />

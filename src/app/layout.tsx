@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 import { FirebaseProvider } from "@/firebase/provider";
+import { usePathname } from "next/navigation";
 
 // Metadata is now static as we are in a client component
 // export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
@@ -32,9 +34,9 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <FirebaseProvider>
-          {children}
+          <AppShell>{children}</AppShell>
+          <Toaster />
         </FirebaseProvider>
-        <Toaster />
       </body>
     </html>
   );
