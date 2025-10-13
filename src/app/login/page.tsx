@@ -28,7 +28,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/logo";
 import { useToast } from "@/hooks/use-toast";
-import { Separator } from "@/components/ui/separator";
 
 const loginSchema = z.object({
   email: z.string().email("Por favor, ingresa un correo válido."),
@@ -79,6 +78,7 @@ export default function LoginPage() {
   }
 
   const onEmailSubmit = async (data: LoginFormValues) => {
+    if (!auth) return;
     try {
       await signInWithEmailAndPassword(auth, data.email, data.password);
       handleAuthSuccess("Inicio de Sesión");
@@ -88,6 +88,7 @@ export default function LoginPage() {
   };
 
   const signInWithGoogle = async () => {
+    if (!auth) return;
     try {
         const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
@@ -114,12 +115,12 @@ export default function LoginPage() {
           </div>
           <CardTitle className="text-2xl">Bienvenido</CardTitle>
           <CardDescription>
-            Elige un método para acceder al sistema.
+            Inicia sesión para acceder a tu dashboard.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Button className="w-full" onClick={signInWithGoogle}>
+           <div className="space-y-2">
+             <Button className="w-full" onClick={signInWithGoogle}>
                 <GoogleIcon />
                 Continuar con Google
             </Button>
@@ -127,18 +128,18 @@ export default function LoginPage() {
                 Continuar con Teléfono
             </Button>
           </div>
-
+          
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
                 <span className="bg-background px-2 text-muted-foreground">
-                    O continúa con
+                    O continúa con tu correo
                 </span>
             </div>
            </div>
-          
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onEmailSubmit)} className="space-y-4">
               <FormField

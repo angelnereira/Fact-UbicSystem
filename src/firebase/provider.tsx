@@ -93,9 +93,9 @@ function FirebaseErrorListener() {
 // --- FIREBASE PROVIDER & CONTEXT ---
 
 interface FirebaseServices {
-  firebaseApp: FirebaseApp;
-  auth: Auth;
-  firestore: Firestore;
+  firebaseApp: FirebaseApp | null;
+  auth: Auth | null;
+  firestore: Firestore | null;
 }
 
 interface UserAuthState {
@@ -117,6 +117,9 @@ export const FirebaseContext = createContext<FirebaseContextState | undefined>(
 export function FirebaseProvider({ children }: { children: ReactNode }) {
   // Memoize Firebase initialization to ensure it only runs once.
   const services = useMemo<FirebaseServices>(() => {
+    if (typeof window === "undefined") {
+      return { firebaseApp: null, auth: null, firestore: null };
+    }
     const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     return {
       firebaseApp: app,
@@ -133,6 +136,10 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
 
   // Subscribe to authentication state changes.
   useEffect(() => {
+    if (!services.auth) {
+      setUserAuthState({ user: null, isUserLoading: false, userError: null });
+      return;
+    }
     const unsubscribe = onAuthStateChanged(
       services.auth,
       firebaseUser => {
@@ -178,13 +185,31 @@ export const useFirebase = (): FirebaseContextState => {
 };
 
 /** Hook to access the Firebase Auth instance. */
-export const useAuth = (): Auth => useFirebase().auth;
+export const useAuth = (): Auth => {
+  const { auth } = useFirebase();
+  if (!auth) {
+    throw new Error('Firebase Auth not initialized. Make sure you are using this hook within a FirebaseProvider.');
+  }
+  return auth;
+}
 
 /** Hook to access the Firestore instance. */
-export const useFirestore = (): Firestore => useFirebase().firestore;
+export const useFirestore = (): Firestore => {
+  const { firestore } = useFirebase();
+   if (!firestore) {
+    throw new Error('Firestore not initialized. Make sure you are using this hook within a FirebaseProvider.');
+  }
+  return firestore;
+}
 
 /** Hook to access the Firebase App instance. */
-export const useFirebaseApp = (): FirebaseApp => useFirebase().firebaseApp;
+export const useFirebaseApp = (): FirebaseApp => {
+  const { firebaseApp } = useFirebase();
+   if (!firebaseApp) {
+    throw new Error('Firebase App not initialized. Make sure you are using this hook within a FirebaseProvider.');
+  }
+  return firebaseApp;
+}
 
 /** Hook to access the authenticated user's state. */
 export const useUser = (): UserAuthState => {

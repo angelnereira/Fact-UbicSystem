@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -13,7 +14,7 @@ import {
   Database,
   LogOut,
 } from "lucide-react";
-import { getAuth, signOut } from "firebase/auth";
+import { signOut } from "firebase/auth";
 
 import {
   DropdownMenu,
@@ -42,7 +43,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
-import { useUser } from "@/firebase";
+import { useUser, useAuth } from "@/firebase";
 
 const menuItems = [
   {
@@ -64,10 +65,11 @@ const menuItems = [
 
 function UserProfile() {
     const { user } = useUser();
+    const auth = useAuth();
     const router = useRouter();
 
     const handleSignOut = async () => {
-        const auth = getAuth();
+        if (!auth) return;
         await signOut(auth);
         router.push('/login');
     }
@@ -82,7 +84,7 @@ function UserProfile() {
                 <User className="size-4" />
               </div>
               <div className="text-left">
-                <p className="text-sm font-medium">{user.displayName || "Usuario"}</p>
+                <p className="text-sm font-medium">{user.displayName || user.email || "Usuario"}</p>
                 <p className="text-xs text-muted-foreground">
                   {user.email}
                 </p>
@@ -201,19 +203,24 @@ function MobileHeader() {
       <div className="w-full flex-1">
         <Logo />
       </div>
+       <UserProfile />
     </header>
   );
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLoginPage = pathname === '/login';
+  const isLoginPage = pathname === "/login";
+
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
 
   return (
     <SidebarProvider>
-      {!isLoginPage && <MainSidebar />}
+      <MainSidebar />
       <SidebarInset className="flex flex-col">
-         {!isLoginPage && <MobileHeader />}
+         <MobileHeader />
         {children}
       </SidebarInset>
     </SidebarProvider>

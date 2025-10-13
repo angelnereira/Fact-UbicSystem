@@ -27,5 +27,5 @@ export default function DashboardLayout({
     );
   }
 
-  return <div className="flex flex-1 flex-col">{children}</div>;
+  return <div className="flex min-h-screen flex-1 flex-col">{children}</div>;
 }
