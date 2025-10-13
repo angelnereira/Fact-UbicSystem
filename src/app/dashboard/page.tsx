@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -21,11 +22,11 @@ import { FoliosStatCard } from "@/components/folios-stat-card";
 
 
 export default function DashboardPage() {
-  const firestore = useFirestore();
   const [recentInvoices, setRecentInvoices] = useState<RecentInvoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const firestore = useFirestore();
 
-  const invoicesQuery = useMemoFirebase(
+  const invoicesQuery = useMemo(
     () => firestore 
       ? query(collection(firestore, "invoiceSubmissions"), orderBy("submissionDate", "desc"), limit(5))
       : null,
