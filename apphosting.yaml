@@ -21,39 +21,43 @@ env:
   # --- Secret Variables ---
   # These are sourced from Secret Manager and are only available at runtime for security.
   # Use 'firebase apphosting:secrets:set SECRET_NAME' to create/update secrets.
+  # IMPORTANT: These have been commented out to prevent build failures if the secrets
+  # have not been created in your project yet. You MUST create them for the app to
+  # work correctly with the HKA API.
 
   # --- Demo Environment Secrets ---
-  - variable: HKA_USER_DEMO
-    secret: HKA_USER_DEMO
-    availability:
-      - RUNTIME
-  - variable: HKA_PASS_DEMO
-    secret: HKA_PASS_DEMO
-    availability:
-      - RUNTIME
-  - variable: HKA_RUC_DEMO
-    secret: HKA_RUC_DEMO
-    availability:
-      - RUNTIME
-  - variable: HKA_DV_DEMO
-    secret: HKA_DV_DEMO
-    availability:
-      - RUNTIME
+  # - variable: HKA_USER_DEMO
+  #   secret: HKA_USER_DEMO
+  #   availability:
+  #     - RUNTIME
+  # - variable: HKA_PASS_DEMO
+  #   secret: HKA_PASS_DEMO
+  #   availability:
+  #     - RUNTIME
+  # - variable: HKA_RUC_DEMO
+  #   secret: HKA_RUC_DEMO
+  #   availability:
+  #     - RUNTIME
+  # - variable: HKA_DV_DEMO
+  #   secret: HKA_DV_DEMO
+  #   availability:
+  #     - RUNTIME
 
   # --- Production Environment Secrets ---
-  - variable: HKA_USER_PROD
-    secret: HKA_USER_PROD
-    availability:
-      - RUNTIME
-  - variable: HKA_PASS_PROD
-    secret: HKA_PASS_PROD
-    availability:
-      - RUNTIME
-  - variable: HKA_RUC_PROD
-    secret: HKA_RUC_PROD
-    availability:
-      - RUNTIME
-  - variable: HKA_DV_PROD
-    secret: HKA_DV_PROD
-    availability:
-      - RUNTIME
+  # - variable: HKA_USER_PROD
+  #   secret: HKA_USER_PROD
+  #   availability:
+  #     - RUNTIME
+  # - variable: HKA_PASS_PROD
+  #   secret: HKA_PASS_PROD
+  #   availability:
+  #     - RUNTIME
+  # - variable: HKA_RUC_PROD
+  #   secret: HKA_RUC_PROD
+  #   availability:
+  #     - RUNTIME
+  # - variable: HKA_DV_PROD
+  #   secret: HKA_DV_PROD
+  #   availability:
+  #     - RUNTIME
+
